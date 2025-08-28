@@ -64,9 +64,7 @@
 ; CONFIG7H
   CONFIG  EBTRB = OFF           ; Boot Block Table Read Protection bit (Boot block (000000-0007FFh) is not protected from table reads executed in other blocks)
 
-#include <xc.inc>  
-    
-;Es para usar registros como LATX, TRISX, OSCCON
+#include <xc.inc>
 
 PSECT  resetVec, class=CODE, reloc=2  ; Sección para el vector de reinicio
 ORG 0X00
@@ -74,15 +72,18 @@ GOTO Inicio
 PSECT  main_code, class=CODE, reloc=2  ; Sección de código principal
 
 Inicio:
+    MOVLW       0X72        ;Poner 8MHz en el oscilador
+    MOVWF       OSCCON
+    
     CLRF    TRISB           ; Configurar PORTB como salida (0 = salida, 1 = entrada)
     CLRF    LATB            ; Apagar todos los pines de PORTB (LED apagado inicialmente)
 
 Loop:
     BSF     LATB,0          ;Enciende el led
-    MOVLW   40
+    MOVLW   80
     CALL    Retardo         ;5s encendido
     BCF     LATB,0          ;Apaga el led
-    MOVLW   16
+    MOVLW   32
     CALL    Retardo         ;2s encendido
     GOTO    Loop            ; Repetir el proceso de parpadeo en bucle infinito
 
@@ -104,16 +105,16 @@ LoopExterno:
     MOVWF   ContadorInterno
     
 LoopInterno:
-    NOP                 ; No hacer nada (consume un ciclo de instrucción)
+    NOP                         ; No hacer nada (consume un ciclo de instrucción)
     DECFSZ  ContadorInterno, F  ; Decrementar ContadorInterno, si es cero, salta la siguiente instrucción
     GOTO    LoopInterno         ; Si no es cero, repetir el bucle interno
     DECFSZ  ContadorExterno, F  ; Decrementar ContadorExterno, si es cero, salta la siguiente instrucción
     GOTO    LoopExterno         ; Si no es cero, repetir el bucle externo
     RETURN
    
-PSECT udata  ; Sección de datos sin inicializar (variables en RAM)
-ContadorExterno:   DS 1   ; Reserva 1 byte de memoria para el contador externo
-ContadorInterno:   DS 1   ; Reserva 1 byte de memoria para el contador interno
+PSECT udata                     ; Sección de datos sin inicializar (variables en RAM)
+ContadorExterno:   DS 1         ; Reserva 1 byte de memoria para el contador externo
+ContadorInterno:   DS 1         ; Reserva 1 byte de memoria para el contador interno
 Rcount:            DS 1
     
 END
