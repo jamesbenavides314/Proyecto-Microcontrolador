@@ -110,3 +110,28 @@ Ret5_inner:
         DECFSZ  Couter,F
         GOTO    Ret5_outer
         RETURN
+Retardo_2s:
+        MOVLW   22
+        MOVWF   Couter
+Ret2_outer:
+        MOVLW   145
+        MOVWF   Cmid
+Ret2_mid:
+        MOVLW   250
+        MOVWF   Cin
+Ret2_inner:
+        DECFSZ  Cin,F
+        GOTO    Ret2_inner
+        DECFSZ  Cmid,F
+        GOTO    Ret2_mid
+        DECFSZ  Couter,F
+        GOTO    Ret2_outer
+        RETURN
+
+
+        PSECT   udata
+Couter: DS 1
+Cmid:   DS 1
+Cin:    DS 1
+
+        END Inicio
