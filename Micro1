@@ -65,3 +65,48 @@
   CONFIG  EBTRB = OFF           ; Boot Block Table Read Protection bit (Boot block (000000-0007FFh) is not protected from table reads executed in other blocks)
 
 // config statements should precede project file includes.
+#include <xc.inc>
+
+        PSECT   resetVec,class=CODE,delta=2
+        ORG     0x00
+        GOTO    Inicio
+
+        PSECT   code,class=CODE,delta=2
+
+
+        GLOBAL Inicio 
+Inicio:
+        MOVLW   0x72
+        MOVWF   OSCCON
+
+        MOVLW   0x0F
+        MOVWF   ADCON1
+
+        CLRF    TRISB
+        CLRF    LATB
+
+Bucle:
+        BSF     LATB,0
+        CALL    Retardo_5s
+        BCF     LATB,0
+        CALL    Retardo_2s
+        GOTO    Bucle
+
+
+Retardo_5s:
+        MOVLW   55
+        MOVWF   Couter
+Ret5_outer:
+        MOVLW   145
+        MOVWF   Cmid
+Ret5_mid:
+        MOVLW   250
+        MOVWF   Cin
+Ret5_inner:
+        DECFSZ  Cin,F
+        GOTO    Ret5_inner
+        DECFSZ  Cmid,F
+        GOTO    Ret5_mid
+        DECFSZ  Couter,F
+        GOTO    Ret5_outer
+        RETURN
