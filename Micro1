@@ -1,137 +1,91 @@
 ; PIC18F4550 Configuration Bit Settings
+; Programa para parpadear un LED: 5s encendido, 2s apagado
 
 ; Assembly source line config statements
 
-; CONFIG1L
-  CONFIG  PLLDIV = 1            ; PLL Prescaler Selection bits (No prescale (4 MHz oscillator input drives PLL directly))
-  CONFIG  CPUDIV = OSC1_PLL2    ; System Clock Postscaler Selection bits ([Primary Oscillator Src: /1][96 MHz PLL Src: /2])
-  CONFIG  USBDIV = 1            ; USB Clock Selection bit (used in Full-Speed USB mode only; UCFG:FSEN = 1) (USB clock source comes directly from the primary oscillator block with no postscale)
+; CONFIG1L - Configuración del PLL y divisores de reloj
+  CONFIG  PLLDIV = 1            ; PLL Prescaler: Sin prescala (oscilador de 4 MHz alimenta PLL directamente)
+  CONFIG  CPUDIV = OSC1_PLL2    ; Postscaler del reloj del sistema: [Osc Primario: /1][PLL 96MHz: /2]
+  CONFIG  USBDIV = 1            ; Selección reloj USB: reloj USB viene directamente del oscilador primario
 
-; CONFIG1H
-  CONFIG  FOSC = INTOSCIO_EC    ; Oscillator Selection bits (Internal oscillator, port function on RA6, EC used by USB (INTIO))
-  CONFIG  FCMEN = OFF           ; Fail-Safe Clock Monitor Enable bit (Fail-Safe Clock Monitor disabled)
-  CONFIG  IESO = OFF            ; Internal/External Oscillator Switchover bit (Oscillator Switchover mode disabled)
+; CONFIG1H - Configuración del oscilador principal
+  CONFIG  FOSC = INTOSCIO_EC    ; Oscilador interno, función de puerto en RA6, EC usado por USB
+  CONFIG  FCMEN = OFF           ; Monitor de reloj fail-safe deshabilitado
+  CONFIG  IESO = OFF            ; Switchover interno/externo de oscilador deshabilitado
 
-; CONFIG2L
-  CONFIG  PWRT = ON             ; Power-up Timer Enable bit (PWRT enabled)
-  CONFIG  BOR = ON              ; Brown-out Reset Enable bits (Brown-out Reset enabled in hardware only (SBOREN is disabled))
-  CONFIG  BORV = 3              ; Brown-out Reset Voltage bits (Minimum setting 2.05V)
-  CONFIG  VREGEN = OFF          ; USB Voltage Regulator Enable bit (USB voltage regulator disabled)
+; CONFIG2L - Configuración de power-up y brown-out
+  CONFIG  PWRT = ON             ; Power-up Timer habilitado (espera estabilización al encender)
+  CONFIG  BOR = ON              ; Brown-out Reset habilitado solo por hardware
+  CONFIG  BORV = 3              ; Voltaje de Brown-out Reset: mínimo 2.05V
+  CONFIG  VREGEN = OFF          ; Regulador de voltaje USB deshabilitado
 
-; CONFIG2H
-  CONFIG  WDT = OFF             ; Watchdog Timer Enable bit (WDT disabled (control is placed on the SWDTEN bit))
-  CONFIG  WDTPS = 32768         ; Watchdog Timer Postscale Select bits (1:32768)
+; CONFIG2H - Configuración del Watchdog Timer
+  CONFIG  WDT = OFF             ; Watchdog Timer deshabilitado
+  CONFIG  WDTPS = 32768         ; Postscaler del WDT: 1:32768
 
-; CONFIG3H
-  CONFIG  CCP2MX = ON           ; CCP2 MUX bit (CCP2 input/output is multiplexed with RC1)
-  CONFIG  PBADEN = OFF          ; PORTB A/D Enable bit (PORTB<4:0> pins are configured as digital I/O on Reset)
-  CONFIG  LPT1OSC = OFF         ; Low-Power Timer 1 Oscillator Enable bit (Timer1 configured for higher power operation)
-  CONFIG  MCLRE = ON            ; MCLR Pin Enable bit (MCLR pin enabled; RE3 input pin disabled)
+; CONFIG3H - Configuración de periféricos y pines
+  CONFIG  CCP2MX = ON           ; CCP2 multiplexado con RC1
+  CONFIG  PBADEN = OFF          ; PORTB<4:0> configurado como I/O digital al reset
+  CONFIG  LPT1OSC = OFF         ; Timer1 configurado para operación de alta potencia
+  CONFIG  MCLRE = ON            ; Pin MCLR habilitado; RE3 como pin de entrada deshabilitado
 
-; CONFIG4L
-  CONFIG  STVREN = ON           ; Stack Full/Underflow Reset Enable bit (Stack full/underflow will cause Reset)
-  CONFIG  LVP = OFF             ; Single-Supply ICSP Enable bit (Single-Supply ICSP disabled)
-  CONFIG  ICPRT = OFF           ; Dedicated In-Circuit Debug/Programming Port (ICPORT) Enable bit (ICPORT disabled)
-  CONFIG  XINST = OFF           ; Extended Instruction Set Enable bit (Instruction set extension and Indexed Addressing mode disabled (Legacy mode))
+; CONFIG4L - Configuración de stack y programación
+  CONFIG  STVREN = ON           ; Reset por stack overflow/underflow habilitado
+  CONFIG  LVP = OFF             ; Programación ICSP de voltaje simple deshabilitada
+  CONFIG  ICPRT = OFF           ; Puerto dedicado de debug/programación deshabilitado
+  CONFIG  XINST = OFF           ; Conjunto extendido de instrucciones deshabilitado (modo legacy)
 
-; CONFIG5L
-  CONFIG  CP0 = OFF             ; Code Protection bit (Block 0 (000800-001FFFh) is not code-protected)
-  CONFIG  CP1 = OFF             ; Code Protection bit (Block 1 (002000-003FFFh) is not code-protected)
-  CONFIG  CP2 = OFF             ; Code Protection bit (Block 2 (004000-005FFFh) is not code-protected)
-  CONFIG  CP3 = OFF             ; Code Protection bit (Block 3 (006000-007FFFh) is not code-protected)
+; CONFIG5L - Protección de código por bloques
+  CONFIG  CP0 = OFF             ; Bloque 0 (000800-001FFFh) sin protección de código
+  CONFIG  CP1 = OFF             ; Bloque 1 (002000-003FFFh) sin protección de código
+  CONFIG  CP2 = OFF             ; Bloque 2 (004000-005FFFh) sin protección de código
+  CONFIG  CP3 = OFF             ; Bloque 3 (006000-007FFFh) sin protección de código
 
-; CONFIG5H
-  CONFIG  CPB = OFF             ; Boot Block Code Protection bit (Boot block (000000-0007FFh) is not code-protected)
-  CONFIG  CPD = OFF             ; Data EEPROM Code Protection bit (Data EEPROM is not code-protected)
+; CONFIG5H - Protección de boot block y EEPROM
+  CONFIG  CPB = OFF             ; Boot block (000000-0007FFh) sin protección de código
+  CONFIG  CPD = OFF             ; EEPROM de datos sin protección de código
 
-; CONFIG6L
-  CONFIG  WRT0 = OFF            ; Write Protection bit (Block 0 (000800-001FFFh) is not write-protected)
-  CONFIG  WRT1 = OFF            ; Write Protection bit (Block 1 (002000-003FFFh) is not write-protected)
-  CONFIG  WRT2 = OFF            ; Write Protection bit (Block 2 (004000-005FFFh) is not write-protected)
-  CONFIG  WRT3 = OFF            ; Write Protection bit (Block 3 (006000-007FFFh) is not write-protected)
+; CONFIG6L - Protección de escritura por bloques
+  CONFIG  WRT0 = OFF            ; Bloque 0 sin protección de escritura
+  CONFIG  WRT1 = OFF            ; Bloque 1 sin protección de escritura
+  CONFIG  WRT2 = OFF            ; Bloque 2 sin protección de escritura
+  CONFIG  WRT3 = OFF            ; Bloque 3 sin protección de escritura
 
-; CONFIG6H
-  CONFIG  WRTC = OFF            ; Configuration Register Write Protection bit (Configuration registers (300000-3000FFh) are not write-protected)
-  CONFIG  WRTB = OFF            ; Boot Block Write Protection bit (Boot block (000000-0007FFh) is not write-protected)
-  CONFIG  WRTD = OFF            ; Data EEPROM Write Protection bit (Data EEPROM is not write-protected)
+; CONFIG6H - Protección de escritura de registros y bloques especiales
+  CONFIG  WRTC = OFF            ; Registros de configuración sin protección de escritura
+  CONFIG  WRTB = OFF            ; Boot block sin protección de escritura
+  CONFIG  WRTD = OFF            ; EEPROM de datos sin protección de escritura
 
-; CONFIG7L
-  CONFIG  EBTR0 = OFF           ; Table Read Protection bit (Block 0 (000800-001FFFh) is not protected from table reads executed in other blocks)
-  CONFIG  EBTR1 = OFF           ; Table Read Protection bit (Block 1 (002000-003FFFh) is not protected from table reads executed in other blocks)
-  CONFIG  EBTR2 = OFF           ; Table Read Protection bit (Block 2 (004000-005FFFh) is not protected from table reads executed in other blocks)
-  CONFIG  EBTR3 = OFF           ; Table Read Protection bit (Block 3 (006000-007FFFh) is not protected from table reads executed in other blocks)
+; CONFIG7L - Protección de lectura de tabla por bloques
+  CONFIG  EBTR0 = OFF           ; Bloque 0 sin protección de table reads desde otros bloques
+  CONFIG  EBTR1 = OFF           ; Bloque 1 sin protección de table reads desde otros bloques
+  CONFIG  EBTR2 = OFF           ; Bloque 2 sin protección de table reads desde otros bloques
+  CONFIG  EBTR3 = OFF           ; Bloque 3 sin protección de table reads desde otros bloques
 
-; CONFIG7H
-  CONFIG  EBTRB = OFF           ; Boot Block Table Read Protection bit (Boot block (000000-0007FFh) is not protected from table reads executed in other blocks)
+; CONFIG7H - Protección de lectura de tabla del boot block
+  CONFIG  EBTRB = OFF           ; Boot block sin protección de table reads desde otros bloques
 
-// config statements should precede project file includes.
+// Las declaraciones de configuración deben preceder a los includes del proyecto
 #include <xc.inc>
 
-        PSECT   resetVec,class=CODE,delta=2
-        ORG     0x00
-        GOTO    Inicio
+  
+    PSECT   resetVec,class=CODE,reloc=2
+    GLOBAL  Inicio
+resetVec:
+    goto    Inicio              ; Saltar al programa principal
 
-        PSECT   code,class=CODE,delta=2
+  
+    PSECT   code,class=CODE,reloc=2
 
-
-        GLOBAL Inicio 
 Inicio:
-        MOVLW   0x72
-        MOVWF   OSCCON
 
-        MOVLW   0x0F
-        MOVWF   ADCON1
+    movlw   0b11110110          ; IRCF2:0=110 (8MHz), SCS1:0=10 (oscilador interno)
+    movwf   OSCCON              ; Cargar configuración en registro OSCCON
 
-        CLRF    TRISB
-        CLRF    LATB
+    ; Configurar todos los pines como digitales (desactivar ADC)
+    movlw   0x0F                ; Valor para hacer todos los pines digitales
+    movwf   ADCON1              ; PCFG3:0=1111 (todos digitales)
 
-Bucle:
-        BSF     LATB,0
-        CALL    Retardo_5s
-        BCF     LATB,0
-        CALL    Retardo_2s
-        GOTO    Bucle
-
-
-Retardo_5s:
-        MOVLW   55
-        MOVWF   Couter
-Ret5_outer:
-        MOVLW   145
-        MOVWF   Cmid
-Ret5_mid:
-        MOVLW   250
-        MOVWF   Cin
-Ret5_inner:
-        DECFSZ  Cin,F
-        GOTO    Ret5_inner
-        DECFSZ  Cmid,F
-        GOTO    Ret5_mid
-        DECFSZ  Couter,F
-        GOTO    Ret5_outer
-        RETURN
-Retardo_2s:
-        MOVLW   22
-        MOVWF   Couter
-Ret2_outer:
-        MOVLW   145
-        MOVWF   Cmid
-Ret2_mid:
-        MOVLW   250
-        MOVWF   Cin
-Ret2_inner:
-        DECFSZ  Cin,F
-        GOTO    Ret2_inner
-        DECFSZ  Cmid,F
-        GOTO    Ret2_mid
-        DECFSZ  Couter,F
-        GOTO    Ret2_outer
-        RETURN
-
-
-        PSECT   udata
-Couter: DS 1
-Cmid:   DS 1
-Cin:    DS 1
-
-        END Inicio
+    ; Configuración del Puerto B
+    clrf    TRISB               ; Todo el Puerto B como salida (0=salida, 1=entrada)
+    clrf    LATB                ; Apagar todos los LEDs del Puerto B inicialmente
