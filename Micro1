@@ -97,3 +97,24 @@ Secuencia3:
     CLRF    LATB                ; Apagar todos los LEDs
     RETURN                      ; Retornar a MainLoop
 
+Retardo:
+    MOVLW   0xFF                ; Cargar 255 en W (bucle externo)
+    MOVWF   R1                  ; Guardar en variable R1
+    MOVLW   0xFF                ; Cargar 255 en W (bucle interno)
+    MOVWF   R2                  ; Guardar en variable R2
+
+DelayLoop:
+    DECFSZ  R1, f               ; Decrementar R1 y saltar siguiente instrucción si es cero
+    GOTO    DelayLoop           ; Si R1 no es cero, repetir bucle
+    
+    DECFSZ  R2, f               ; Decrementar R2 y saltar siguiente instrucción si es cero
+    GOTO    DelayLoop           ; Si R2 no es cero, repetir bucle completo
+    
+    RETURN                      ; Retornar a la función que llamó
+
+
+PSECT udata
+R1: DS 1                        ; Reservar 1 byte para contador del bucle externo
+R2: DS 1                        ; Reservar 1 byte para contador del bucle interno
+
+END                      
