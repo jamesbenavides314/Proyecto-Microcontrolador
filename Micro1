@@ -1,146 +1,15 @@
-; PIC18F4550 Configuration Bit Settings
-; Programa para parpadear un LED: 5s encendido, 2s apagado
-
-; Assembly source line config statements
-
-; CONFIG1L - Configuración del PLL y divisores de reloj
-  CONFIG  PLLDIV = 1            ; PLL Prescaler: Sin prescala (oscilador de 4 MHz alimenta PLL directamente)
-  CONFIG  CPUDIV = OSC1_PLL2    ; Postscaler del reloj del sistema: [Osc Primario: /1][PLL 96MHz: /2]
-  CONFIG  USBDIV = 1            ; Selección reloj USB: reloj USB viene directamente del oscilador primario
-
-; CONFIG1H - Configuración del oscilador principal
-  CONFIG  FOSC = INTOSCIO_EC    ; Oscilador interno, función de puerto en RA6, EC usado por USB
-  CONFIG  FCMEN = OFF           ; Monitor de reloj fail-safe deshabilitado
-  CONFIG  IESO = OFF            ; Switchover interno/externo de oscilador deshabilitado
-
-; CONFIG2L - Configuración de power-up y brown-out
-  CONFIG  PWRT = ON             ; Power-up Timer habilitado (espera estabilización al encender)
-  CONFIG  BOR = ON              ; Brown-out Reset habilitado solo por hardware
-  CONFIG  BORV = 3              ; Voltaje de Brown-out Reset: mínimo 2.05V
-  CONFIG  VREGEN = OFF          ; Regulador de voltaje USB deshabilitado
-
-; CONFIG2H - Configuración del Watchdog Timer
-  CONFIG  WDT = OFF             ; Watchdog Timer deshabilitado
-  CONFIG  WDTPS = 32768         ; Postscaler del WDT: 1:32768
-
-; CONFIG3H - Configuración de periféricos y pines
-  CONFIG  CCP2MX = ON           ; CCP2 multiplexado con RC1
-  CONFIG  PBADEN = OFF          ; PORTB<4:0> configurado como I/O digital al reset
-  CONFIG  LPT1OSC = OFF         ; Timer1 configurado para operación de alta potencia
-  CONFIG  MCLRE = ON            ; Pin MCLR habilitado; RE3 como pin de entrada deshabilitado
-
-; CONFIG4L - Configuración de stack y programación
-  CONFIG  STVREN = ON           ; Reset por stack overflow/underflow habilitado
-  CONFIG  LVP = OFF             ; Programación ICSP de voltaje simple deshabilitada
-  CONFIG  ICPRT = OFF           ; Puerto dedicado de debug/programación deshabilitado
-  CONFIG  XINST = OFF           ; Conjunto extendido de instrucciones deshabilitado (modo legacy)
-
-; CONFIG5L - Protección de código por bloques
-  CONFIG  CP0 = OFF             ; Bloque 0 (000800-001FFFh) sin protección de código
-  CONFIG  CP1 = OFF             ; Bloque 1 (002000-003FFFh) sin protección de código
-  CONFIG  CP2 = OFF             ; Bloque 2 (004000-005FFFh) sin protección de código
-  CONFIG  CP3 = OFF             ; Bloque 3 (006000-007FFFh) sin protección de código
-
-; CONFIG5H - Protección de boot block y EEPROM
-  CONFIG  CPB = OFF             ; Boot block (000000-0007FFh) sin protección de código
-  CONFIG  CPD = OFF             ; EEPROM de datos sin protección de código
-
-; CONFIG6L - Protección de escritura por bloques
-  CONFIG  WRT0 = OFF            ; Bloque 0 sin protección de escritura
-  CONFIG  WRT1 = OFF            ; Bloque 1 sin protección de escritura
-  CONFIG  WRT2 = OFF            ; Bloque 2 sin protección de escritura
-  CONFIG  WRT3 = OFF            ; Bloque 3 sin protección de escritura
-
-; CONFIG6H - Protección de escritura de registros y bloques especiales
-  CONFIG  WRTC = OFF            ; Registros de configuración sin protección de escritura
-  CONFIG  WRTB = OFF            ; Boot block sin protección de escritura
-  CONFIG  WRTD = OFF            ; EEPROM de datos sin protección de escritura
-
-; CONFIG7L - Protección de lectura de tabla por bloques
-  CONFIG  EBTR0 = OFF           ; Bloque 0 sin protección de table reads desde otros bloques
-  CONFIG  EBTR1 = OFF           ; Bloque 1 sin protección de table reads desde otros bloques
-  CONFIG  EBTR2 = OFF           ; Bloque 2 sin protección de table reads desde otros bloques
-  CONFIG  EBTR3 = OFF           ; Bloque 3 sin protección de table reads desde otros bloques
-
-; CONFIG7H - Protección de lectura de tabla del boot block
-  CONFIG  EBTRB = OFF           ; Boot block sin protección de table reads desde otros bloques
-
-// Las declaraciones de configuración deben preceder a los includes del proyecto
-#include <xc.inc>
-
-  
-    PSECT   resetVec,class=CODE,reloc=2
-    GLOBAL  Inicio
-resetVec:
-    goto    Inicio              ; Saltar al programa principal
-
-  
-    PSECT   code,class=CODE,reloc=2
-
-Inicio:
-
-    movlw   0b11110110          ; IRCF2:0=110 (8MHz), SCS1:0=10 (oscilador interno)
-    movwf   OSCCON              ; Cargar configuración en registro OSCCON
-
-    ; Configurar todos los pines como digitales (desactivar ADC)
-    movlw   0x0F                ; Valor para hacer todos los pines digitales
-    movwf   ADCON1              ; PCFG3:0=1111 (todos digitales)
-
-    ; Configuración del Puerto B
-    clrf    TRISB               ; Todo el Puerto B como salida (0=salida, 1=entrada)
-    clrf    LATB                ; Apagar todos los LEDs del Puerto B inicialmente
-Bucle:
-
-    bsf     LATB,0              ; Poner en 1 el bit 0 de LATB (encender LED en RB0)
-    call    Retardo_5s          ; Llamar subrutina de retardo de 5 segundos
+CONFIG  FOSC = INTOSCIO_EC      ; Oscilador interno, función de puerto en RA6, EC usado por USB
+CONFIG  WDT = OFF               ; Watchdog Timer deshabilitado
+CONFIG  LVP = OFF               ; Programación de bajo voltaje deshabilitada
+CONFIG  PBADEN = OFF            ; PORTB<4:0> configurado como I/O digital al reset
+CONFIG  MCLRE = OFF             ; Pin MCLR deshabilitado, RE3 como entrada digital
     
-    ; Apagar LED conectado a RB0  
-    bcf     LATB,0              ; Poner en 0 el bit 0 de LATB (apagar LED en RB0)
-    call    Retardo_2s          ; Llamar subrutina de retardo de 2 segundos
-    
-    goto    Bucle               ; Repetir el ciclo infinitamente
+#include <xc.inc>               
 
 
-Retardo_5s:
-    movlw   55                  ; Cargar 55 en W (bucle externo)
-    movwf   Couter              ; Guardar en variable Couter
-Ret5_outer:
-    movlw   145                 ; Cargar 145 en W (bucle medio)
-    movwf   Cmid                ; Guardar en variable Cmid
-Ret5_mid:
-    movlw   250                 ; Cargar 250 en W (bucle interno)
-    movwf   Cin                 ; Guardar en variable Cin
-Ret5_inner:
-    decfsz  Cin,f               ; Decrementar Cin y saltar si es cero
-    goto    Ret5_inner          ; Si no es cero, repetir bucle interno
-    decfsz  Cmid,f              ; Decrementar Cmid y saltar si es cero
-    goto    Ret5_mid            ; Si no es cero, repetir bucle medio
-    decfsz  Couter,f            ; Decrementar Couter y saltar si es cero
-    goto    Ret5_outer          ; Si no es cero, repetir bucle externo
-    return                      ; Retornar a la función que llamó
-
-Retardo_2s:
-    movlw   22                  ; Cargar 22 en W (bucle externo) - menor que 55 para ~2s
-    movwf   Couter              ; Guardar en variable Couter
-Ret2_outer:
-    movlw   145                 ; Cargar 145 en W (bucle medio) - igual que en retardo de 5s
-    movwf   Cmid                ; Guardar en variable Cmid
-Ret2_mid:
-    movlw   250                 ; Cargar 250 en W (bucle interno) - igual que en retardo de 5s
-    movwf   Cin                 ; Guardar en variable Cin
-Ret2_inner:
-    decfsz  Cin,f               ; Decrementar Cin y saltar si es cero
-    goto    Ret2_inner          ; Si no es cero, repetir bucle interno
-    decfsz  Cmid,f              ; Decrementar Cmid y saltar si es cero
-    goto    Ret2_mid            ; Si no es cero, repetir bucle medio
-    decfsz  Couter,f            ; Decrementar Couter y saltar si es cero
-    goto    Ret2_outer          ; Si no es cero, repetir bucle externo
-    return                      ; Retornar a la función que llamó
+PSECT  resetVec, class=CODE, reloc=2, abs
+ORG 0x00                        ; Vector de reset
+    GOTO Inicio                 ; Saltar al programa principal
 
 
-    PSECT   udata_acs
-Couter: DS 1                    ; Reservar 1 byte para contador externo
-Cmid:   DS 1                    ; Reservar 1 byte para contador medio  
-Cin:    DS 1                    ; Reservar 1 byte para contador interno
-
-    END   
+PSECT main_code, class=CODE, reloc=2
