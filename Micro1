@@ -55,3 +55,45 @@ Secuencia1:
     
     CLRF    LATB                ; Apagar todos los LEDs
     RETURN                      ; Retornar a MainLoop
+Secuencia2:
+    MOVLW   0b00001010          ; Encender RB1 y RB3 (LEDs alternados)
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000101          ; Encender RB0 y RB2 (LEDs alternados opuestos)
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    CLRF    LATB                ; Apagar todos los LEDs
+    RETURN                      ; Retornar a MainLoop
+
+Secuencia3:
+    ; Ida: de RB0 a RB3
+    MOVLW   0b00000001          ; Encender RB0
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000010          ; Encender RB1
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000100          ; Encender RB2
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00001000          ; Encender RB3
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    ; Vuelta: de RB3 a RB1 (sin repetir RB0)
+    MOVLW   0b00000100          ; Encender RB2
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000010          ; Encender RB1
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    CLRF    LATB                ; Apagar todos los LEDs
+    RETURN                      ; Retornar a MainLoop
+
