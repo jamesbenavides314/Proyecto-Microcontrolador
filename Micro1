@@ -13,3 +13,45 @@ ORG 0x00                        ; Vector de reset
 
 
 PSECT main_code, class=CODE, reloc=2
+Inicio:
+  
+    MOVLW   0b01110010          ; IRCF2:0=111 (8MHz), SCS1:0=10 (oscilador interno)
+    MOVWF   OSCCON              ; Cargar configuración en registro OSCCON
+    
+    
+    CLRF    TRISB               ; Puerto B completo como salida (0=salida)
+    CLRF    LATB                ; Apagar todos los LEDs inicialmente
+
+
+MainLoop:
+    ; Ejecutar secuencia 1: LEDs corriendo de izquierda a derecha
+    CALL    Secuencia1
+    
+    ; Ejecutar secuencia 2: LEDs alternados (par/impar)
+    CALL    Secuencia2
+    
+    ; Ejecutar secuencia 3: LEDs ping-pong (ida y vuelta)
+    CALL    Secuencia3
+    
+    ; Volver a iniciar el ciclo completo
+    GOTO    MainLoop
+
+Secuencia1:
+    MOVLW   0b00000001          ; Encender solo RB0
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000010          ; Encender solo RB1
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00000100          ; Encender solo RB2
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    MOVLW   0b00001000          ; Encender solo RB3
+    MOVWF   LATB                ; Escribir al puerto B
+    CALL    Retardo             ; Esperar tiempo definido
+    
+    CLRF    LATB                ; Apagar todos los LEDs
+    RETURN                      ; Retornar a MainLoop
