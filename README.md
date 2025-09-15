@@ -1,70 +1,124 @@
-#include "p18f4550.inc"
+PROCESSOR 18F4550
+#include <xc.inc>
 
 ; CONFIGURACIÓN DEL MICROCONTROLADOR
 CONFIG  PLLDIV = 1            ; No prescaler del PLL
-CONFIG  CPUDIV = OSC1_PLL2    ; Postscaler del sistema
+CONFIG  CPUDIV = OSC1_PLL2    ; Postscaler del sistema  
 CONFIG  USBDIV = 2            ; División de reloj USB
 CONFIG  FOSC = INTOSCIO_EC    ; Oscilador interno
 CONFIG  WDT = OFF             ; Watchdog Timer deshabilitado
-CONFIG MCLRE = OFF        ; MCLARE deshabilitado, se usa como entrada digital
+CONFIG  MCLRE = OFF           ; MCLARE deshabilitado, se usa como entrada digital
 CONFIG  LVP = OFF             ; Low Voltage Programming deshabilitado
 
 ; VARIABLES EN MEMORIA
-Contador1 EQU 0x20
-Contador2 EQU 0x21
-Contador3 EQU 0x22
+PSECT udata_acs
+Contador1:      DS 1          ; 1 byte
+Contador2:      DS 1          ; 1 byte  
+Contador3:      DS 1          ; 1 byte
+ContadorSecuencia: DS 1       ; 1 byte
 
+PSECT code
 ORG 0x00
     GOTO inicio
 
 inicio:
-    MOVLW 0x72          ; Configura oscilador interno a 8MHz
+    MOVLW 0b11110110          ; Configura oscilador interno a 8MHz
     MOVWF OSCCON        
-
     
     CLRF TRISB          ; Configurar PORTB como salida
-    
     CLRF LATB           ; Apagar todos los LEDs
+    CLRF ContadorSecuencia ; Inicializar contador de secuencia
 
-loop:
-    BSF LATB, 0         ; Encender LED en RB0
-    CALL retraso3s      ; Mantener encendido por 3s
-    BCF LATB, 0         ; Apagar LED en RB0
+loop_principal:
+    ; Verificar qué secuencia ejecutar
+    MOVF ContadorSecuencia, W
+    XORLW 0
+    BZ secuencia1
+    MOVF ContadorSecuencia, W
+    XORLW 1
+    BZ secuencia2
+    GOTO secuencia3
 
-    BSF LATB, 1         ; Encender LED en RB1
-    CALL retraso3s      ; Mantener encendido por 3s
-    BCF LATB, 1         ; Apagar LED en RB1
+secuencia1:
+    ; Secuencia 1: Encendido secuencial (0->1->2->3)
+    MOVLW 0b00000001    ; RB0
+    CALL ejecutar_led
+    MOVLW 0b00000010    ; RB1
+    CALL ejecutar_led
+    MOVLW 0b00000100    ; RB2
+    CALL ejecutar_led
+    MOVLW 0b00001000    ; RB3
+    CALL ejecutar_led
+    GOTO cambiar_secuencia
 
-    BSF LATB, 2         ; Encender LED en RB2
-    CALL retraso3s      ; Mantener encendido por 3s
-    BCF LATB, 2         ; Apagar LED en RB2
+secuencia2:
+    ; Secuencia 2: Encendido desde extremos hacia centro (0y3->1y2)
+    MOVLW 0b00001001    ; RB0 y RB3
+    CALL ejecutar_led
+    MOVLW 0b00000110    ; RB1 y RB2
+    CALL ejecutar_led
+    GOTO cambiar_secuencia
 
-    GOTO loop           ; Repetir en bucle
+secuencia3:
+    ; Secuencia 3: Parpadeo alterno (0y2, luego 1y3)
+    MOVLW 0b00000101    ; RB0 y RB2
+    CALL ejecutar_led
+    MOVLW 0b00001010    ; RB1 y RB3
+    CALL ejecutar_led
 
-; RETARDO DE 3 SEGUNDOS
-retraso3s:
-    MOVLW D'30'         
+cambiar_secuencia:
+    ; Cambiar a la siguiente secuencia
+    INCF ContadorSecuencia, F
+    MOVF ContadorSecuencia, W
+    XORLW 3             ; Si llegamos a 3, volver a 0
+    BNZ loop_principal
+    CLRF ContadorSecuencia
+    GOTO loop_principal
+
+; SUBRUTINA PARA EJECUTAR PATRÓN DE LED
+ejecutar_led:
+    MOVWF LATB          ; Encender LEDs según patrón
+    CALL retraso5s      ; Mantener encendido por 5 segundos
+    CLRF LATB           ; Apagar todos los LEDs
+    CALL retraso2s      ; Mantener apagado por 2 segundos
+    RETURN
+
+; RETARDO DE 5 SEGUNDOS
+retraso5s:
+    MOVLW 50            ; 50 x 100ms = 5000ms
     MOVWF Contador1
-bucle1:
+bucle5s:
     CALL retraso100ms
     DECFSZ Contador1, F 
-    GOTO bucle1
+    GOTO bucle5s
+    RETURN 
+
+; RETARDO DE 2 SEGUNDOS
+retraso2s:
+    MOVLW 20            ; 20 x 100ms = 2000ms
+    MOVWF Contador1
+bucle2s:
+    CALL retraso100ms
+    DECFSZ Contador1, F 
+    GOTO bucle2s
     RETURN 
 
 ; RETARDO DE 100ms (BASADO EN 8MHz)
 retraso100ms:
-    MOVLW D'250'         
+    MOVLW 200           ; Ajustado para mejor precisión
     MOVWF Contador2
-bucle2:
-    MOVLW D'250'
+bucle_100ms_ext:
+    MOVLW 200
     MOVWF Contador3
-bucle3:
+bucle_100ms_int:
+    NOP
+    NOP
     NOP
     NOP
     DECFSZ Contador3, F
-    GOTO bucle3
+    GOTO bucle_100ms_int
     DECFSZ Contador2, F
-    GOTO bucle2
+    GOTO bucle_100ms_ext
     RETURN
 
 END
