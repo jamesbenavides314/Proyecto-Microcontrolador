@@ -89,3 +89,32 @@ Inicio:
     ; Configuración del Puerto B
     clrf    TRISB               ; Todo el Puerto B como salida (0=salida, 1=entrada)
     clrf    LATB                ; Apagar todos los LEDs del Puerto B inicialmente
+Bucle:
+
+    bsf     LATB,0              ; Poner en 1 el bit 0 de LATB (encender LED en RB0)
+    call    Retardo_5s          ; Llamar subrutina de retardo de 5 segundos
+    
+    ; Apagar LED conectado a RB0  
+    bcf     LATB,0              ; Poner en 0 el bit 0 de LATB (apagar LED en RB0)
+    call    Retardo_2s          ; Llamar subrutina de retardo de 2 segundos
+    
+    goto    Bucle               ; Repetir el ciclo infinitamente
+
+
+Retardo_5s:
+    movlw   55                  ; Cargar 55 en W (bucle externo)
+    movwf   Couter              ; Guardar en variable Couter
+Ret5_outer:
+    movlw   145                 ; Cargar 145 en W (bucle medio)
+    movwf   Cmid                ; Guardar en variable Cmid
+Ret5_mid:
+    movlw   250                 ; Cargar 250 en W (bucle interno)
+    movwf   Cin                 ; Guardar en variable Cin
+Ret5_inner:
+    decfsz  Cin,f               ; Decrementar Cin y saltar si es cero
+    goto    Ret5_inner          ; Si no es cero, repetir bucle interno
+    decfsz  Cmid,f              ; Decrementar Cmid y saltar si es cero
+    goto    Ret5_mid            ; Si no es cero, repetir bucle medio
+    decfsz  Couter,f            ; Decrementar Couter y saltar si es cero
+    goto    Ret5_outer          ; Si no es cero, repetir bucle externo
+    return                      ; Retornar a la función que llamó
