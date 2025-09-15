@@ -118,3 +118,29 @@ Ret5_inner:
     decfsz  Couter,f            ; Decrementar Couter y saltar si es cero
     goto    Ret5_outer          ; Si no es cero, repetir bucle externo
     return                      ; Retornar a la función que llamó
+
+Retardo_2s:
+    movlw   22                  ; Cargar 22 en W (bucle externo) - menor que 55 para ~2s
+    movwf   Couter              ; Guardar en variable Couter
+Ret2_outer:
+    movlw   145                 ; Cargar 145 en W (bucle medio) - igual que en retardo de 5s
+    movwf   Cmid                ; Guardar en variable Cmid
+Ret2_mid:
+    movlw   250                 ; Cargar 250 en W (bucle interno) - igual que en retardo de 5s
+    movwf   Cin                 ; Guardar en variable Cin
+Ret2_inner:
+    decfsz  Cin,f               ; Decrementar Cin y saltar si es cero
+    goto    Ret2_inner          ; Si no es cero, repetir bucle interno
+    decfsz  Cmid,f              ; Decrementar Cmid y saltar si es cero
+    goto    Ret2_mid            ; Si no es cero, repetir bucle medio
+    decfsz  Couter,f            ; Decrementar Couter y saltar si es cero
+    goto    Ret2_outer          ; Si no es cero, repetir bucle externo
+    return                      ; Retornar a la función que llamó
+
+
+    PSECT   udata_acs
+Couter: DS 1                    ; Reservar 1 byte para contador externo
+Cmid:   DS 1                    ; Reservar 1 byte para contador medio  
+Cin:    DS 1                    ; Reservar 1 byte para contador interno
+
+    END   
