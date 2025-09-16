@@ -25,7 +25,7 @@ Inicio:
     
 Loop_Principal:
     ; Verificar botón (RD0) - cuando se presiona va a 0V (GND)
-    BTFSC   PORTD,0         ; Si RD0 = 1 (no presionado), salta la siguiente línea
+    BTFSC   PORTD,0         ; Si RD0 = 0 (no presionado), salta la siguiente línea
     GOTO    Cambiar_Secuencia
     
     ; Ejecutar la secuencia actual
