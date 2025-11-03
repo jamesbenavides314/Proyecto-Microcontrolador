@@ -1,0 +1,99 @@
+#include <xc.h>  
+
+#pragma config FOSC = INTOSCIO_EC   
+#pragma config WDT = OFF            
+#pragma config LVP = OFF           
+#pragma config PBADEN = OFF         
+#pragma config PLLDIV = 1         
+#pragma config CPUDIV = OSC1_PLL2  
+#pragma config USBDIV = 2           
+#pragma config FCMEN = OFF          
+#pragma config IESO = OFF           
+#pragma config MCLRE = OFF         
+
+#define _XTAL_FREQ 8000000          // Defino la frecuencia del cristal (8 MHz) para los retardos
+
+// Variables globales
+volatile unsigned char secuencia = 0;       // Guarda qué secuencia está activa (0, 1 o 2)
+volatile unsigned char velocidad = 0;       // Guarda la velocidad actual (0, 1 o 2)
+volatile unsigned char paso = 0;            // Guarda en qué paso de la secuencia voy
+
+// Banderas para saber si hubo interrupciones
+volatile unsigned char cambio_secuencia = 0;
+volatile unsigned char cambio_velocidad = 0;
+
+// Arreglo con los tiempos de espera para las tres velocidades
+const unsigned int delays[3] = {500, 250, 100};  // Lenta, Media, Rápida
+
+// Función de retardo (usa el delay interno del compilador)
+void delay_ms(unsigned int ms) {
+    while(ms--) {
+        __delay_ms(1);   // Repite el retardo tantas veces como indique "ms"
+    }
+}
+
+// Rutina de interrupción general
+void __interrupt() ISR(void) {
+    // Si se activó la interrupción del botón 1 (INT0)
+    if (INTCONbits.INT0IF) {
+        cambio_secuencia = 1;       // Levanto bandera para cambiar secuencia
+        INTCONbits.INT0IF = 0;      // Limpio la bandera para que pueda volver a activarse
+    }
+    
+    // Si se activó la interrupción del botón 2 (INT1)
+    if (INTCON3bits.INT1IF) {
+        cambio_velocidad = 1;       // Levanto bandera para cambiar velocidad
+        INTCON3bits.INT1IF = 0;     // Limpio la bandera
+    }
+}
+
+// Secuencia 1: Enciende los LEDs uno por uno
+void secuencia_1(void) {
+    if (paso == 0) {
+        LATD = 0b00000001;  // Solo LED1
+    }
+    else if (paso == 1) {
+        LATD = 0b00000010;  // Solo LED2
+    }
+    else if (paso == 2) {
+        LATD = 0b00000100;  // Solo LED3
+    }
+    else if (paso == 3) {
+        LATD = 0b00001000;  // Solo LED4
+    }
+    else if (paso == 4) {
+        LATD = 0b00000000;  // Todos apagados
+    }
+    
+    paso++;                 // Paso siguiente
+    if (paso > 4) {
+        paso = 0;           // Reinicio la secuencia
+    }
+}
+
+// Secuencia 2: LEDs van y regresan (ida y vuelta)
+void secuencia_2(void) {
+    if (paso == 0) {
+        LATD = 0b00000001;  // LED1
+    }
+    else if (paso == 1) {
+        LATD = 0b00000010;  // LED2
+    }
+    else if (paso == 2) {
+        LATD = 0b00000100;  // LED3
+    }
+    else if (paso == 3) {
+        LATD = 0b00001000;  // LED4
+    }
+    else if (paso == 4) {
+        LATD = 0b00000100;  // Regreso a LED3
+    }
+    else if (paso == 5) {
+        LATD = 0b00000010;  // Regreso a LED2
+    }
+    
+    paso++;
+    if (paso > 5) {
+        paso = 0;           // Reinicio la secuencia
+    }
+}
