@@ -1,202 +1,104 @@
-#include <xc.h>  
+#include <xc.h>
+
 
 #pragma config FOSC = INTOSCIO_EC   
 #pragma config WDT = OFF            
 #pragma config LVP = OFF           
-#pragma config PBADEN = OFF         
-#pragma config PLLDIV = 1         
+#pragma config PBADEN = OFF       
+#pragma config PLLDIV = 1           
 #pragma config CPUDIV = OSC1_PLL2  
-#pragma config USBDIV = 2           
+#pragma config USBDIV = 2          
 #pragma config FCMEN = OFF          
 #pragma config IESO = OFF           
 #pragma config MCLRE = OFF         
 
-#define _XTAL_FREQ 8000000          // Defino la frecuencia del cristal (8 MHz) para los retardos
+#define _XTAL_FREQ 8000000
 
 // Variables globales
-volatile unsigned char secuencia = 0;       // Guarda qué secuencia está activa (0, 1 o 2)
-volatile unsigned char velocidad = 0;       // Guarda la velocidad actual (0, 1 o 2)
-volatile unsigned char paso = 0;            // Guarda en qué paso de la secuencia voy
+volatile unsigned char secuencia = 0;       // 0, 1, 2 (3 secuencias)
+volatile unsigned char velocidad = 0;       // 0, 1, 2 (3 velocidades)
+volatile unsigned char paso = 0;            // Paso actual de la secuencia
 
-// Banderas para saber si hubo interrupciones
+// Banderas para control de interrupciones
 volatile unsigned char cambio_secuencia = 0;
 volatile unsigned char cambio_velocidad = 0;
 
-// Arreglo con los tiempos de espera para las tres velocidades
+// Delays para las tres velocidades (en milisegundos)
 const unsigned int delays[3] = {500, 250, 100};  // Lenta, Media, Rápida
 
-// Función de retardo (usa el delay interno del compilador)
+// Función de retardo simple
 void delay_ms(unsigned int ms) {
     while(ms--) {
-        __delay_ms(1);   // Repite el retardo tantas veces como indique "ms"
+        __delay_ms(1);
     }
 }
 
-// Rutina de interrupción general
+// Rutina de servicio de interrupción - SOLO levanta banderas
 void __interrupt() ISR(void) {
-    // Si se activó la interrupción del botón 1 (INT0)
+    // Interrupción INT0 - Cambio de secuencia
     if (INTCONbits.INT0IF) {
-        cambio_secuencia = 1;       // Levanto bandera para cambiar secuencia
-        INTCONbits.INT0IF = 0;      // Limpio la bandera para que pueda volver a activarse
+        if (cambio_secuencia == 0) {    // Solo si no hay una bandera pendiente
+            cambio_secuencia = 1;       // Levantar bandera
+        }
+        INTCONbits.INT0IF = 0;          // Limpiar bandera de interrupción
     }
     
-    // Si se activó la interrupción del botón 2 (INT1)
+    // Interrupción INT1 - Cambio de velocidad
     if (INTCON3bits.INT1IF) {
-        cambio_velocidad = 1;       // Levanto bandera para cambiar velocidad
-        INTCON3bits.INT1IF = 0;     // Limpio la bandera
+        if (cambio_velocidad == 0) {    // Solo si no hay una bandera pendiente
+            cambio_velocidad = 1;       // Levantar bandera
+        }
+        INTCON3bits.INT1IF = 0;         // Limpiar bandera de interrupción
     }
 }
 
-// Secuencia 1: Enciende los LEDs uno por uno
+// Función para ejecutar la secuencia 1: Encendido secuencial
 void secuencia_1(void) {
     if (paso == 0) {
-        LATD = 0b00000001;  // Solo LED1
+        LATD = 0b00000001;  // Solo D0
     }
     else if (paso == 1) {
-        LATD = 0b00000010;  // Solo LED2
+        LATD = 0b00000010;  // Solo D1
     }
     else if (paso == 2) {
-        LATD = 0b00000100;  // Solo LED3
+        LATD = 0b00000100;  // Solo D2
     }
     else if (paso == 3) {
-        LATD = 0b00001000;  // Solo LED4
+        LATD = 0b00001000;  // Solo D3
     }
     else if (paso == 4) {
         LATD = 0b00000000;  // Todos apagados
     }
     
-    paso++;                 // Paso siguiente
+    paso++;
     if (paso > 4) {
-        paso = 0;           // Reinicio la secuencia
+        paso = 0;
     }
 }
 
-// Secuencia 2: LEDs van y regresan (ida y vuelta)
+// Función para ejecutar la secuencia 2: Ida y vuelta
 void secuencia_2(void) {
     if (paso == 0) {
-        LATD = 0b00000001;  // LED1
+        LATD = 0b00000001;  // D0
     }
     else if (paso == 1) {
-        LATD = 0b00000010;  // LED2
+        LATD = 0b00000010;  // D1
     }
     else if (paso == 2) {
-        LATD = 0b00000100;  // LED3
+        LATD = 0b00000100;  // D2
     }
     else if (paso == 3) {
-        LATD = 0b00001000;  // LED4
+        LATD = 0b00001000;  // D3
     }
     else if (paso == 4) {
-        LATD = 0b00000100;  // Regreso a LED3
+        LATD = 0b00000100;  // D2 (regreso)
     }
     else if (paso == 5) {
-        LATD = 0b00000010;  // Regreso a LED2
+        LATD = 0b00000010;  // D1 (regreso)
     }
     
     paso++;
     if (paso > 5) {
-        paso = 0;           // Reinicio la secuencia
-    }
-}
-// Secuencia 3: Parpadeo alternado de pares de LEDs
-void secuencia_3(void) {
-    if (paso == 0) {
-        LATD = 0b00001001;  // LED1 y LED4
-    }
-    else if (paso == 1) {
-        LATD = 0b00000110;  // LED2 y LED3
-    }
-    else if (paso == 2) {
-        LATD = 0b00001111;  // Todos encendidos
-    }
-    else if (paso == 3) {
-        LATD = 0b00000000;  // Todos apagados
-    }
-    else if (paso == 4) {
-        LATD = 0b00001010;  // LED2 y LED4
-    }
-    else if (paso == 5) {
-        LATD = 0b00000101;  // LED1 y LED3
-    }
-    
-    paso++;
-    if (paso > 5) {
-        paso = 0;           // Reinicio la secuencia
-    }
-}
-
-void main(void) {
-    // Configuro el oscilador interno a 8 MHz
-    OSCCONbits.IRCF = 0b111;    
-    OSCCONbits.SCS = 0b10;      
-    
-    // Configuración de los pines
-    TRISBbits.TRISB0 = 1;       // RB0 como entrada (botón para cambiar secuencia)
-    TRISBbits.TRISB1 = 1;       // RB1 como entrada (botón para cambiar velocidad)
-    TRISDbits.TRISD0 = 0;       // RD0 como salida (LED 1)
-    TRISDbits.TRISD1 = 0;       // RD1 como salida (LED 2)
-    TRISDbits.TRISD2 = 0;       // RD2 como salida (LED 3)
-    TRISDbits.TRISD3 = 0;       // RD3 como salida (LED 4)
-    
-    LATD = 0x00;                // Apago todos los LEDs al inicio
-    ADCON1 = 0x0F;              // Desactivo las funciones analógicas (todo digital)
-    
-    // Configuración de interrupciones externas
-    INTCONbits.INT0IF = 0;      // Limpio bandera INT0
-    INTCON2bits.INTEDG0 = 1;    // Detectar flanco de subida
-    INTCONbits.INT0IE = 1;      // Habilito INT0
-    
-    INTCON3bits.INT1IF = 0;     // Limpio bandera INT1
-    INTCON2bits.INTEDG1 = 1;    // Detectar flanco de subida
-    INTCON3bits.INT1IE = 1;     // Habilito INT1
-    
-    INTCONbits.GIE = 1;         // Habilito interrupciones globales
-    
-    // Bucle principal
-    while (1) {
-        // Si se presionó el botón de secuencia
-        if (cambio_secuencia == 1) {
-            __delay_ms(50);  // Pequeño retardo para evitar rebotes del botón
-            
-            if (PORTBbits.RB0 == 1) {  // Verifico que el botón sigue presionado
-                secuencia++;            // Cambio a la siguiente secuencia
-                if (secuencia > 2) {    // Si paso del límite, vuelvo a la primera
-                    secuencia = 0;
-                }
-                paso = 0;               // Reinicio el paso
-                while (PORTBbits.RB0 == 1) {  // Espero que se suelte el botón
-                    __delay_ms(10);
-                }
-            }
-            cambio_secuencia = 0;       // Bajo la bandera
-        }
-        
-        // Si se presionó el botón de velocidad
-        if (cambio_velocidad == 1) {
-            __delay_ms(50);  // Anti-rebote
-            if (PORTBbits.RB1 == 1) {
-                velocidad++;            // Cambio a la siguiente velocidad
-                if (velocidad > 2) {    // Si paso de la más rápida, vuelvo a la lenta
-                    velocidad = 0;
-                }
-                while (PORTBbits.RB1 == 1) {  // Espero que se suelte
-                    __delay_ms(10);
-                }
-            }
-            cambio_velocidad = 0;       // Bajo la bandera
-        }
-        
-        // Según la secuencia activa, llamo a la función correspondiente
-        if (secuencia == 0) {
-            secuencia_1();
-        }
-        else if (secuencia == 1) {
-            secuencia_2();
-        }
-        else if (secuencia == 2) {
-            secuencia_3();
-        }
-        
-        // Aplico el retardo según la velocidad seleccionada
-        delay_ms(delays[velocidad]);
+        paso = 0;
     }
 }
