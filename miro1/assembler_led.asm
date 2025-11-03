@@ -68,10 +68,10 @@
     
 ;Es para usar registros como LATX, TRISX, OSCCON
 
-PSECT  resetVec, class=CODE, reloc=2  ; Secci髇 para el vector de reinicio
+PSECT  resetVec, class=CODE, reloc=2  ; Secci贸n para el vector de reinicio
 ORG 0X00
 GOTO Inicio
-PSECT  main_code, class=CODE, reloc=2  ; Secci髇 de c骴igo principal
+PSECT  main_code, class=CODE, reloc=2  ; Secci贸n de c贸digo principal
 
 Inicio:
     CLRF    TRISB           ; Configurar PORTB como salida (0 = salida, 1 = entrada)
@@ -104,14 +104,14 @@ LoopExterno:
     MOVWF   ContadorInterno
     
 LoopInterno:
-    NOP                 ; No hacer nada (consume un ciclo de instrucci髇)
-    DECFSZ  ContadorInterno, F  ; Decrementar ContadorInterno, si es cero, salta la siguiente instrucci髇
+    NOP                 ; No hacer nada (consume un ciclo de instrucci贸n)
+    DECFSZ  ContadorInterno, F  ; Decrementar ContadorInterno, si es cero, salta la siguiente instrucci贸n
     GOTO    LoopInterno         ; Si no es cero, repetir el bucle interno
-    DECFSZ  ContadorExterno, F  ; Decrementar ContadorExterno, si es cero, salta la siguiente instrucci髇
+    DECFSZ  ContadorExterno, F  ; Decrementar ContadorExterno, si es cero, salta la siguiente instrucci贸n
     GOTO    LoopExterno         ; Si no es cero, repetir el bucle externo
     RETURN
    
-PSECT udata  ; Secci髇 de datos sin inicializar (variables en RAM)
+PSECT udata  ; Secci贸n de datos sin inicializar (variables en RAM)
 ContadorExterno:   DS 1   ; Reserva 1 byte de memoria para el contador externo
 ContadorInterno:   DS 1   ; Reserva 1 byte de memoria para el contador interno
 Rcount:            DS 1
