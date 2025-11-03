@@ -6,3 +6,59 @@ void ADC_Init(void);
 unsigned int ADC_Read(unsigned char canal);
 
 #endif
+
+////////config.h////////
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <xc.h>
+#include <pic18f4550.h>
+
+// Configuración de bits
+#pragma config FOSC = INTOSCIO_EC
+#pragma config WDT = OFF
+#pragma config LVP = OFF
+#pragma config PBADEN = OFF
+#pragma config MCLRE = OFF
+
+#define _XTAL_FREQ 8000000
+
+#endif
+
+////////HW-498////////
+#ifndef HW498_H
+#define HW498_H
+
+#define HW498_CANAL 0
+
+void HW498_Init(void);
+float HW498_LeerTemperatura(void);
+
+#endif
+
+////////lcd.h////////
+#ifndef LCD_H
+#define LCD_H
+
+// Definición de pines del LCD
+#define LCD_RS PORTBbits.RB0
+#define LCD_EN PORTBbits.RB1
+#define LCD_D4 PORTBbits.RB4
+#define LCD_D5 PORTBbits.RB5
+#define LCD_D6 PORTBbits.RB6
+#define LCD_D7 PORTBbits.RB7
+
+#define LCD_CLEAR 0x01
+#define LCD_HOME 0x02
+#define LCD_LINE1 0x80
+#define LCD_LINE2 0xC0
+
+void LCD_Init(void);
+void LCD_Command(unsigned char cmd);
+void LCD_Char(unsigned char data);
+void LCD_String(const char *str);
+void LCD_Clear(void);
+void LCD_SetCursor(unsigned char row, unsigned char col);
+void LCD_Float(float num, unsigned char decimales);
+
+#endif
