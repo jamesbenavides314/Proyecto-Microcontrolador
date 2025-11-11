@@ -1,0 +1,33 @@
+#include <stdio.h>
+
+int main() {
+    int n, i;
+    float num, mayor;
+
+    printf("¿Cuántos números desea ingresar? ");
+    scanf("%d", &n);
+
+    if (n <= 0) {
+        printf("Debe ingresar al menos un número.\n");
+        return 0;
+    }
+
+    // Leer el primer número y asumir que es el mayor
+    printf("Ingrese el número 1: ");
+    scanf("%f", &mayor);
+
+    // Leer los siguientes números y comparar
+    for (i = 2; i <= n; i++) {
+        printf("Ingrese el número %d: ", i);
+        scanf("%f", &num);
+
+        if (num > mayor) {
+            mayor = num;
+        }
+    }
+
+    // Mostrar el resultado
+    printf("\nEl número mayor es: %.2f\n", mayor);
+
+    return 0;
+}
