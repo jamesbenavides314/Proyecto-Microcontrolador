@@ -1,0 +1,145 @@
+//////////Config.//////////
+#include <xc.h>
+
+#ifndef CONFIG_H
+#define	CONFIG_H
+
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
+// CONFIG1L
+#pragma config PLLDIV = 1       // PLL Prescaler (Divide by 5 for 20MHz input)
+#pragma config CPUDIV = OSC1_PLL2 // System Clock Postscaler
+#pragma config USBDIV = 2       // USB Clock Selection
+
+// CONFIG1H - CRITICAL CHANGE: Use internal oscillator properly
+#pragma config FOSC = INTOSC_EC  // Internal oscillator, port function on RA6
+#pragma config FCMEN = OFF      // Fail-Safe Clock Monitor disabled
+#pragma config IESO = OFF       // Oscillator Switchover mode disabled
+
+// CONFIG2L
+#pragma config PWRT = ON        // Power-up Timer ENABLED (helps stability)
+#pragma config BOR = ON         // Brown-out Reset enabled
+#pragma config BORV = 3         // Brown-out Reset Voltage (2.05V)
+#pragma config VREGEN = OFF     // USB Voltage Regulator disabled
+
+// CONFIG2H
+#pragma config WDT = OFF        // Watchdog Timer disabled
+#pragma config WDTPS = 32768    // Watchdog Timer Postscale
+
+// CONFIG3H
+#pragma config CCP2MX = ON      // CCP2 MUX bit
+#pragma config PBADEN = OFF     // PORTB<4:0> digital I/O on Reset (CRITICAL!)
+#pragma config LPT1OSC = OFF    // Timer1 higher power operation
+#pragma config MCLRE = OFF       // MCLR pin enabled (CHANGED to ON)
+
+// CONFIG4L
+#pragma config STVREN = ON      // Stack Full/Underflow Reset enabled
+#pragma config LVP = OFF        // Low-Voltage Programming disabled
+#pragma config ICPRT = OFF      // ICPORT disabled
+#pragma config XINST = OFF      // Extended Instruction Set disabled
+
+// CONFIG5L
+#pragma config CP0 = OFF        // Code Protection disabled
+#pragma config CP1 = OFF
+#pragma config CP2 = OFF
+#pragma config CP3 = OFF
+
+// CONFIG5H
+#pragma config CPB = OFF        // Boot Block Code Protection disabled
+#pragma config CPD = OFF        // Data EEPROM Code Protection disabled
+
+// CONFIG6L
+#pragma config WRT0 = OFF       // Write Protection disabled
+#pragma config WRT1 = OFF
+#pragma config WRT2 = OFF
+#pragma config WRT3 = OFF
+
+// CONFIG6H
+#pragma config WRTC = OFF       // Configuration Register Write Protection disabled
+#pragma config WRTB = OFF       // Boot Block Write Protection disabled
+#pragma config WRTD = OFF       // Data EEPROM Write Protection disabled
+
+// CONFIG7L
+#pragma config EBTR0 = OFF      // Table Read Protection disabled
+#pragma config EBTR1 = OFF
+#pragma config EBTR2 = OFF
+#pragma config EBTR3 = OFF
+
+// CONFIG7H
+#pragma config EBTRB = OFF      // Boot Block Table Read Protection disabled
+
+#define _XTAL_FREQ 8000000      // 8 MHz for delay calculations
+
+#ifdef	__cplusplus
+}
+#endif
+
+#endif	/* CONFIG_H */
+
+
+//////////Ds1307.h//////////
+#ifndef DS1307_H
+#define DS1307_H
+
+void RTC_Init(void);
+void RTC_SetDateTime(unsigned char h, unsigned char m, unsigned char s,
+                     unsigned char d, unsigned char mo, unsigned char y);
+void RTC_GetDateTime(unsigned char *hour, unsigned char *min, unsigned char *sec,
+                     unsigned char *day, unsigned char *month, unsigned char *year);
+unsigned char BCD2DEC(unsigned char val);
+unsigned char DEC2BCD(unsigned char val);
+
+#endif
+
+
+//////////I2C.h//////////
+#ifndef I2C_H
+#define I2C_H
+
+void I2C_Master_Init(const unsigned long c);
+void I2C_Master_Wait(void);
+void I2C_Master_Start(void);
+void I2C_Master_RepeatedStart(void);
+void I2C_Master_Stop(void);
+unsigned char I2C_Master_Write(unsigned char d);
+unsigned char I2C_Master_Read(unsigned char a);
+
+#endif
+
+
+//////////LCD.h//////////
+#ifndef LCD_H
+#define	LCD_H
+
+#ifdef	__cplusplus
+extern "C" {
+#endif
+
+#include <xc.h>
+#include <pic18f4550.h>
+#include "Config.h"
+    
+/*********************Definition of Ports********************************/
+#define RS LATBbits.LATB0       // PIN 0 of PORTB for register select
+#define EN LATBbits.LATB1       // PIN 1 of PORTB for enable
+#define ldata LATB              // PORTB(PB4-PB7) for LCD Data Output
+#define LCD_Port TRISB
+   
+#define CMD_CLEAR_LCD 0x01
+#define CMD_CURSOR_HOME 0x02
+    
+// Function prototypes
+void LCD_Init(void);
+void LCD_Command(unsigned char cmd);
+void LCD_Char(unsigned char character);
+void LCD_String(const char *msg);
+void LCD_String_xy(char row, char pos, const char *msg);
+void LCD_Clear(void);
+
+#ifdef	__cplusplus
+}
+#endif
+
+#endif	/* LCD_H */
