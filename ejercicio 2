@@ -1,0 +1,16 @@
+#include <stdio.h>
+
+int main() {
+    int i;
+    int suma = 0;
+
+    // Bucle para sumar los 50 primeros números
+    for (i = 1; i <= 50; i++) {
+        suma = suma + i;
+    }
+
+    // Mostrar el resultado
+    printf("La suma de los 50 primeros números naturales es: %d\n", suma);
+
+    return 0;
+}
