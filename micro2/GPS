@@ -142,3 +142,332 @@ void LCD_Clear(void);
 #endif
 
 #endif	/* LCD_H */
+
+//////////GPS.c//////////
+#include "GPS.h"
+#include "Config.h"
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#define GPS_BUFFER_SIZE 100
+static char gps_buffer[GPS_BUFFER_SIZE];
+static uint8_t buffer_index = 0;
+static bool sentence_ready = false;
+static GPS_Data current_gps_data;
+
+void GPS_Init(void) {
+    // Configurar pines TX (RC6) y RX (RC7)
+    TRISCbits.TRISC6 = 0;  // TX como salida
+    TRISCbits.TRISC7 = 1;  // RX como entrada
+    
+    // Configurar UART para 9600 baud con Fosc = 8MHz
+    TXSTA = 0x24;   // TX habilitado, 8 bits, async, BRGH=1
+    RCSTA = 0x90;   // Serial port habilitado, RX habilitado
+    BAUDCON = 0x08; // BRG16 = 1
+    
+    // CORRECCION CRITICA: Baudrate para 9600
+    // SPBRG = (Fosc / (4 * Baud)) - 1 = (8000000 / 38400) - 1 = 207
+    SPBRGH = 0;
+    SPBRG = 207;    // Valor correcto para 9600 baud
+    
+    // Habilitar recepción con interrupciones (opcional)
+    PIE1bits.RCIE = 0;  // Polling por ahora
+    
+    // Inicializar estructura de datos
+    memset(&current_gps_data, 0, sizeof(GPS_Data));
+    current_gps_data.data_valid = false;
+    current_gps_data.fix_quality = 0;
+    strcpy(current_gps_data.satellites, "0");
+    strcpy(current_gps_data.latitude, "0.0");
+    strcpy(current_gps_data.longitude, "0.0");
+    strcpy(current_gps_data.time, "00:00:00");
+    strcpy(current_gps_data.altitude, "0");
+    current_gps_data.lat_dir = 'N';
+    current_gps_data.lon_dir = 'W';
+}
+
+static char GPS_ReadByte(void) {
+    if (PIR1bits.RCIF) {
+        return RCREG;
+    }
+    return 0;
+}
+
+void GPS_Update(void) {
+    char c;
+    
+    while (PIR1bits.RCIF) {
+        c = GPS_ReadByte();
+        
+        if (c == '$') {
+            buffer_index = 0;
+            gps_buffer[buffer_index++] = c;
+            sentence_ready = false;
+        }
+        else if (c == '\n' || c == '\r') {
+            if (buffer_index > 0) {
+                gps_buffer[buffer_index] = '\0';
+                sentence_ready = true;
+                GPS_ParseNMEA();
+            }
+        }
+        else if (buffer_index < GPS_BUFFER_SIZE - 1) {
+            gps_buffer[buffer_index++] = c;
+        }
+    }
+}
+
+bool GPS_DataReady(void) {
+    return current_gps_data.data_valid;
+}
+
+void GPS_GetData(GPS_Data *gps) {
+    memcpy(gps, &current_gps_data, sizeof(GPS_Data));
+}
+
+static void extract_field(char *dest, const char *src, uint8_t field_num, uint8_t max_len) {
+    uint8_t comma_count = 0;
+    uint8_t i = 0, j = 0;
+    
+    // Buscar el campo (empezando desde campo 0)
+    while (src[i] != '\0' && comma_count < field_num) {
+        if (src[i] == ',') {
+            comma_count++;
+        }
+        i++;
+    }
+    
+    // Copiar el campo
+    while (src[i] != ',' && src[i] != '\0' && src[i] != '*' && j < max_len - 1) {
+        dest[j++] = src[i++];
+    }
+    dest[j] = '\0';
+}
+
+void GPS_ParseNMEA(void) {
+    char temp[15];
+    
+    // Verificar si es GPGGA o GNGGA
+    if (strstr(gps_buffer, "GPGGA") != NULL || strstr(gps_buffer, "GNGGA") != NULL) {
+        
+        // Campo 1: Hora UTC (HHMMSS.sss)
+        extract_field(temp, gps_buffer, 1, sizeof(temp));
+        if (strlen(temp) >= 6) {
+            char hour[3] = {temp[0], temp[1], '\0'};
+            char min[3] = {temp[2], temp[3], '\0'};
+            char sec[3] = {temp[4], temp[5], '\0'};
+            sprintf(current_gps_data.time, "%s:%s:%s", hour, min, sec);
+        }
+        
+        // Campo 2: Latitud (ddmm.mmmm)
+        extract_field(current_gps_data.latitude, gps_buffer, 2, sizeof(current_gps_data.latitude));
+        
+        // Campo 3: Dirección latitud (N/S)
+        extract_field(temp, gps_buffer, 3, sizeof(temp));
+        current_gps_data.lat_dir = (temp[0] != '\0') ? temp[0] : 'N';
+        
+        // Campo 4: Longitud (dddmm.mmmm)
+        extract_field(current_gps_data.longitude, gps_buffer, 4, sizeof(current_gps_data.longitude));
+        
+        // Campo 5: Dirección longitud (E/W)
+        extract_field(temp, gps_buffer, 5, sizeof(temp));
+        current_gps_data.lon_dir = (temp[0] != '\0') ? temp[0] : 'W';
+        
+        // Campo 6: Calidad del fix (0=sin fix, 1=GPS, 2=DGPS)
+        extract_field(temp, gps_buffer, 6, sizeof(temp));
+        current_gps_data.fix_quality = (temp[0] != '\0') ? (temp[0] - '0') : 0;
+        
+        // Campo 7: Número de satélites
+        extract_field(current_gps_data.satellites, gps_buffer, 7, sizeof(current_gps_data.satellites));
+        
+        // Campo 9: Altitud
+        extract_field(current_gps_data.altitude, gps_buffer, 9, sizeof(current_gps_data.altitude));
+        
+        // Validar datos
+        if (current_gps_data.fix_quality > 0 && strlen(current_gps_data.latitude) > 0) {
+            current_gps_data.data_valid = true;
+        } else {
+            current_gps_data.data_valid = false;
+        }
+    }
+}
+
+//////////LCD.c//////////
+#include "LCD.h"
+
+void LCD_Init(void)
+{
+    LCD_Port = 0x00;
+    __delay_ms(50);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    RS = 0;
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | 0x20;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    LCD_Command(0x28);
+    LCD_Command(0x0C);
+    LCD_Command(0x06);
+    LCD_Command(0x01);
+    __delay_ms(2);
+}
+
+void LCD_Command(unsigned char cmd)
+{
+    ldata = (ldata & 0x0F) | (cmd & 0xF0);
+    RS = 0;
+    EN = 1;
+    __delay_us(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | ((unsigned char)(cmd << 4) & 0xF0);
+    EN = 1;
+    __delay_us(1);
+    EN = 0;
+    __delay_ms(2);
+}
+
+void LCD_Char(unsigned char character)
+{
+    ldata = (ldata & 0x0F) | (character & 0xF0);
+    RS = 1;
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+    
+    ldata = (ldata & 0x0F) | ((unsigned char)(character << 4) & 0xF0);
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+}
+
+void LCD_String(const char *msg)
+{
+    while(*msg != '\0')
+    {
+        LCD_Char(*msg);
+        msg++;
+    }
+}
+
+void LCD_String_xy(char row, char pos, const char *msg)
+{
+    char location = 0;
+    
+    if(row == 0)
+    {
+        location = 0x80 | (pos & 0x0F);
+    }
+    else if(row == 1)
+    {
+        location = 0xC0 | (pos & 0x0F);
+    }
+    
+    LCD_Command(location);
+    LCD_String(msg);
+}
+
+void LCD_Clear(void)
+{
+    LCD_Command(0x01);
+    __delay_ms(2);
+}
+
+//////////main.c//////////
+#include <xc.h>
+#include <stdio.h>
+#include <string.h>
+#include "Config.h"
+#include "LCD.h"
+#include "GPS.h"
+
+void main(void) 
+{
+    GPS_Data gps_data;
+    char buffer[17];
+    uint16_t counter = 0;
+    
+    // Configurar oscilador a 8 MHz
+    OSCCONbits.IRCF = 0b111;
+    OSCCONbits.SCS = 0b00;
+    while(!OSCCONbits.IOFS);
+    __delay_ms(100);
+    
+    // Configurar pines como digitales
+    ADCON1 = 0x0F;
+    CMCON = 0x07;
+    
+    // Configurar PORTB para LCD
+    TRISB = 0x00;
+    PORTB = 0x00;
+    LATB = 0x00;
+    
+    // Inicializar LCD
+    LCD_Init();
+    LCD_Clear();
+    LCD_String_xy(0, 0, "GPS NEO-6M");
+    LCD_String_xy(1, 0, "Iniciando...");
+    __delay_ms(2000);
+    
+    // Inicializar GPS
+    GPS_Init();
+    
+    LCD_Clear();
+    LCD_String_xy(0, 0, "Esperando GPS...");
+    
+    while(1) 
+    {
+        // Leer datos del GPS
+        GPS_Update();
+        
+        // Actualizar pantalla cada 500ms
+        if (++counter >= 100) {
+            counter = 0;
+            
+            if (GPS_DataReady()) {
+                GPS_GetData(&gps_data);
+                
+                // Línea 1: Latitud
+                sprintf(buffer, "Lat:%.8s%c", 
+                        gps_data.latitude, 
+                        gps_data.lat_dir);
+                LCD_String_xy(0, 0, buffer);
+                
+                // Línea 2: Longitud y satélites
+                sprintf(buffer, "Lon:%.7s %sS", 
+                        gps_data.longitude,
+                        gps_data.satellites);
+                LCD_String_xy(1, 0, buffer);
+            } else {
+                LCD_String_xy(0, 0, "Sin senal GPS   ");
+                LCD_String_xy(1, 0, "Buscando...     ");
+            }
+        }
+        
+        __delay_ms(5);
+    }
+}
