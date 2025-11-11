@@ -79,6 +79,7 @@ extern "C" {
 #endif	/* CONFIG_H */
 
 
+
 //////////Ds1307.h//////////
 #ifndef DS1307_H
 #define DS1307_H
@@ -94,6 +95,7 @@ unsigned char DEC2BCD(unsigned char val);
 #endif
 
 
+
 //////////I2C.h//////////
 #ifndef I2C_H
 #define I2C_H
@@ -107,6 +109,7 @@ unsigned char I2C_Master_Write(unsigned char d);
 unsigned char I2C_Master_Read(unsigned char a);
 
 #endif
+
 
 
 //////////LCD.h//////////
@@ -143,3 +146,397 @@ void LCD_Clear(void);
 #endif
 
 #endif	/* LCD_H */
+
+
+
+//////////DS1307.c//////////
+#include "I2C.h"
+#include "DS1307.h"
+#include "LCD.h"
+#include "Config.h"
+
+#define DS1307_ADDR_WRITE 0xD0  // 0b11010000
+#define DS1307_ADDR_READ  0xD1  // 0b11010001
+
+unsigned char BCD2DEC(unsigned char val) {
+    return ((val >> 4) * 10) + (val & 0x0F);
+}
+
+unsigned char DEC2BCD(unsigned char val) {
+    return ((val / 10) << 4) | (val % 10);
+}
+
+void RTC_Init(void) {
+    unsigned char sec;
+    
+    __delay_ms(50);
+
+    // Leer registro de segundos (dirección 0x00)
+    I2C_Master_Start();
+    __delay_us(10);
+    I2C_Master_Write(DS1307_ADDR_WRITE);
+    __delay_us(10);
+    I2C_Master_Write(0x00);  // Apuntar a registro 0
+    __delay_us(10);
+    
+    I2C_Master_RepeatedStart();
+    __delay_us(10);
+    I2C_Master_Write(DS1307_ADDR_READ);
+    __delay_us(10);
+    sec = I2C_Master_Read(0);  // Leer sin ACK (último byte)
+    __delay_us(10);
+    I2C_Master_Stop();
+    
+    __delay_ms(20);
+
+    // Verificar si el bit CH está en 1 (reloj detenido)
+    if (sec & 0x80) {
+        LCD_Clear();
+        LCD_String_xy(0, 0, "RTC detenido");
+        LCD_String_xy(1, 0, "Activando...");
+        __delay_ms(1500);
+
+        // Activar el oscilador (poner CH=0)
+        I2C_Master_Start();
+        __delay_us(10);
+        I2C_Master_Write(DS1307_ADDR_WRITE);
+        __delay_us(10);
+        I2C_Master_Write(0x00);
+        __delay_us(10);
+        I2C_Master_Write(sec & 0x7F);  // Limpiar bit 7 (CH=0)
+        __delay_us(10);
+        I2C_Master_Stop();
+        
+        __delay_ms(20);
+    }
+}
+
+void RTC_SetDateTime(unsigned char h, unsigned char m, unsigned char s,
+                     unsigned char d, unsigned char mo, unsigned char y) {
+    
+    __delay_ms(10);
+    
+    I2C_Master_Start();
+    __delay_us(10);
+    I2C_Master_Write(DS1307_ADDR_WRITE);
+    __delay_us(10);
+    I2C_Master_Write(0x00);  // Comenzar en dirección 0x00
+    __delay_us(10);
+
+    // Escribir todos los registros secuencialmente
+    I2C_Master_Write(DEC2BCD(s) & 0x7F);  // Segundos con CH=0
+    __delay_us(10);
+    I2C_Master_Write(DEC2BCD(m));         // Minutos
+    __delay_us(10);
+    I2C_Master_Write(DEC2BCD(h) & 0x3F);  // Horas (formato 24h)
+    __delay_us(10);
+    I2C_Master_Write(0x01);               // Día de la semana (1)
+    __delay_us(10);
+    I2C_Master_Write(DEC2BCD(d));         // Día del mes
+    __delay_us(10);
+    I2C_Master_Write(DEC2BCD(mo));        // Mes
+    __delay_us(10);
+    I2C_Master_Write(DEC2BCD(y));         // Año
+    __delay_us(10);
+    
+    I2C_Master_Stop();
+    
+    __delay_ms(20);
+}
+
+void RTC_GetDateTime(unsigned char *hour, unsigned char *min, unsigned char *sec,
+                     unsigned char *day, unsigned char *month, unsigned char *year) {
+    
+    __delay_ms(5);
+    
+    // Establecer puntero en dirección 0x00
+    I2C_Master_Start();
+    __delay_us(10);
+    I2C_Master_Write(DS1307_ADDR_WRITE);
+    __delay_us(10);
+    I2C_Master_Write(0x00);
+    __delay_us(10);
+    
+    // Leer registros secuencialmente
+    I2C_Master_RepeatedStart();
+    __delay_us(10);
+    I2C_Master_Write(DS1307_ADDR_READ);
+    __delay_us(10);
+
+    *sec   = BCD2DEC(I2C_Master_Read(1) & 0x7F);  // Segundos (bit CH ignorado)
+    __delay_us(10);
+    *min   = BCD2DEC(I2C_Master_Read(1));         // Minutos
+    __delay_us(10);
+    *hour  = BCD2DEC(I2C_Master_Read(1) & 0x3F);  // Horas (bits formato ignorados)
+    __delay_us(10);
+    I2C_Master_Read(1);                           // Día de la semana (ignorar)
+    __delay_us(10);
+    *day   = BCD2DEC(I2C_Master_Read(1));         // Día del mes
+    __delay_us(10);
+    *month = BCD2DEC(I2C_Master_Read(1));         // Mes
+    __delay_us(10);
+    *year  = BCD2DEC(I2C_Master_Read(0));         // Año (último, sin ACK)
+    __delay_us(10);
+    
+    I2C_Master_Stop();
+}
+
+
+
+/////////I2C.c//////////
+#include <xc.h>
+#define _XTAL_FREQ 8000000
+
+void I2C_Master_Init(const unsigned long c) {
+    TRISC |= 0b00011000;  // RC3 y RC4 como entradas
+    SSPCON1 = 0x28;       // I2C Master mode
+    SSPCON2 = 0x00;
+    SSPADD = 19;          // 100kHz @ 8MHz
+    SSPSTAT = 0x80;
+}
+
+void I2C_Master_Wait(void) {
+    unsigned int timeout = 0;
+    while (((SSPCON2 & 0x1F) || (SSPSTAT & 0x04)) && timeout < 5000) {
+        timeout++;
+        __delay_us(1);
+    }
+}
+
+void I2C_Master_Start(void) {
+    I2C_Master_Wait();
+    SEN = 1;
+    while(SEN);
+}
+
+void I2C_Master_RepeatedStart(void) {
+    I2C_Master_Wait();
+    RSEN = 1;
+    while(RSEN);
+}
+
+void I2C_Master_Stop(void) {
+    I2C_Master_Wait();
+    PEN = 1;
+    while(PEN);
+}
+
+unsigned char I2C_Master_Write(unsigned char d) {
+    I2C_Master_Wait();
+    SSPBUF = d;
+    I2C_Master_Wait();
+    return !ACKSTAT;
+}
+
+unsigned char I2C_Master_Read(unsigned char a) {
+    unsigned char temp;
+    I2C_Master_Wait();
+    RCEN = 1;
+    I2C_Master_Wait();
+    temp = SSPBUF;
+    I2C_Master_Wait();
+    ACKDT = (a) ? 0 : 1;
+    ACKEN = 1;
+    return temp;
+}
+
+
+
+//////////LCD.c//////////
+#include "LCD.h"
+
+void LCD_Init(void)
+{
+    LCD_Port = 0x00;
+    __delay_ms(50);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    RS = 0;
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | 0x30;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | 0x20;
+    EN = 1;
+    __delay_ms(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    LCD_Command(0x28);
+    LCD_Command(0x0C);
+    LCD_Command(0x06);
+    LCD_Command(0x01);
+    __delay_ms(2);
+}
+
+void LCD_Command(unsigned char cmd)
+{
+    ldata = (ldata & 0x0F) | (cmd & 0xF0);
+    RS = 0;
+    EN = 1;
+    __delay_us(1);
+    EN = 0;
+    __delay_ms(1);
+    
+    ldata = (ldata & 0x0F) | ((unsigned char)(cmd << 4) & 0xF0);
+    EN = 1;
+    __delay_us(1);
+    EN = 0;
+    __delay_ms(2);
+}
+
+void LCD_Char(unsigned char character)
+{
+    ldata = (ldata & 0x0F) | (character & 0xF0);
+    RS = 1;
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+    
+    ldata = (ldata & 0x0F) | ((unsigned char)(character << 4) & 0xF0);
+    EN = 1;
+    __delay_ms(5);
+    EN = 0;
+    __delay_ms(5);
+}
+
+void LCD_String(const char *msg)
+{
+    while(*msg != '\0')
+    {
+        LCD_Char(*msg);
+        msg++;
+    }
+}
+
+void LCD_String_xy(char row, char pos, const char *msg)
+{
+    char location = 0;
+    
+    if(row == 0)
+    {
+        location = 0x80 | (pos & 0x0F);
+    }
+    else if(row == 1)
+    {
+        location = 0xC0 | (pos & 0x0F);
+    }
+    
+    LCD_Command(location);
+    LCD_String(msg);
+}
+
+void LCD_Clear(void)
+{
+    LCD_Command(0x01);
+    __delay_ms(2);
+}
+
+
+
+//////////main.c/////////
+#include <xc.h>
+#include <stdio.h>
+#include "Config.h"
+#include "LCD.h"
+#include "I2C.h"
+#include "DS1307.h"
+
+void main(void) 
+{
+    unsigned char hour, min, sec, day, month, year;
+    char buffer[17];
+    
+    // ========== CONFIGURACIÓN DEL OSCILADOR ==========
+    OSCCONbits.IRCF = 0b111;    // 8MHz
+    OSCCONbits.SCS = 0b10;      // Usar oscilador interno (IMPORTANTE!)
+    while(!OSCCONbits.IOFS);    // Esperar estabilidad
+    __delay_ms(100);
+    
+    // ========== CONFIGURAR PUERTOS ==========
+    ADCON1 = 0x0F;  // Todo digital
+    CMCON = 0x07;   // Comparadores OFF
+    
+    TRISB = 0x00;   // PORTB salidas (LCD)
+    PORTB = 0x00;
+    LATB = 0x00;
+    
+    TRISC = 0xFF;   // PORTC entradas (temporal)
+    PORTC = 0x00;
+    
+    __delay_ms(200);
+    
+    // ========== INICIALIZAR LCD ==========
+    LCD_Init();
+    __delay_ms(100);
+    
+    LCD_Clear();
+    LCD_String_xy(0, 0, "Sistema RTC");
+    LCD_String_xy(1, 0, "Test 2025");
+    __delay_ms(2000);
+    
+    // ========== INICIALIZAR I2C ==========
+    LCD_Clear();
+    LCD_String_xy(0, 0, "Configurando");
+    LCD_String_xy(1, 0, "Bus I2C...");
+    __delay_ms(500);
+    
+    I2C_Master_Init(100000);
+    __delay_ms(200);
+    
+    LCD_Clear();
+    LCD_String_xy(0, 0, "I2C Listo!");
+    __delay_ms(1500);
+    
+    // ========== INICIALIZAR RTC ==========
+    LCD_Clear();
+    LCD_String_xy(0, 0, "Init RTC");
+    LCD_String_xy(1, 0, "DS1307...");
+    __delay_ms(1000);
+    
+    RTC_Init();
+    __delay_ms(100);
+    
+    // ========== CONFIGURAR HORA ==========
+    LCD_Clear();
+    LCD_String_xy(0, 0, "Config Hora");
+    __delay_ms(1000);
+    
+    // AJUSTA AQUÍ: Hora, Min, Seg, Día, Mes, Año
+    RTC_SetDateTime(16, 30, 0, 24, 10, 25);
+    __delay_ms(100);
+    
+    LCD_Clear();
+    LCD_String_xy(0, 0, "RTC OK!");
+    __delay_ms(1500);
+    
+    // ========== BUCLE PRINCIPAL ==========
+    LCD_Clear();
+    
+    while(1) 
+    {
+        RTC_GetDateTime(&hour, &min, &sec, &day, &month, &year);
+        
+        sprintf(buffer, "Hora: %02d:%02d:%02d", hour, min, sec);
+        LCD_String_xy(0, 0, buffer);
+        
+        sprintf(buffer, "Fecha:%02d/%02d/%02d", day, month, year);
+        LCD_String_xy(1, 0, buffer);
+        
+        __delay_ms(1000);
+    }
+}
