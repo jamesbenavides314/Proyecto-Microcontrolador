@@ -1,0 +1,23 @@
+#include <stdio.h>
+
+int main() {
+    int a = 0, b = 1, siguiente;
+
+    printf("Serie de Fibonacci menor que 1000:\n");
+
+    // Mostrar los dos primeros términos
+    printf("%d, %d", a, b);
+
+    // Calcular y mostrar los siguientes términos
+    siguiente = a + b;
+    while (siguiente < 1000) {
+        printf(", %d", siguiente);
+        a = b;
+        b = siguiente;
+        siguiente = a + b;
+    }
+
+    printf("\n");
+
+    return 0;
+}
