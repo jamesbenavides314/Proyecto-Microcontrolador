@@ -63,3 +63,129 @@ void LCD_Command(uint8_t cmd) {
         __delay_us(100);  // para los demas comandos
     }
 }
+// Enviar dato al LCD
+void LCD_Data(uint8_t data) {
+    RS = 1;  // pongo RS en 1 para mandar datos (caracteres)
+    LCD_Send_Nibble(data >> 4);   // parte alta
+    LCD_Send_Nibble(data & 0x0F); // parte baja
+    __delay_us(100);  // espero que se procese
+}
+
+// Inicializar LCD en modo 4 bits - Versión robusta
+void LCD_Init(void) {
+    // espero bastante tiempo para que el LCD se estabilice al encender
+    __delay_ms(100);
+    
+    RS = 0;  // inicio con RS en bajo
+    EN = 0;  // y enable tambien
+    
+    // Secuencia de inicialización mejorada según datasheet HD44780
+    // esto es medio raro pero hay que hacerlo asi segun el datasheet
+    // primer intento - modo 8 bits
+    D4 = 0; D5 = 0; D6 = 1; D7 = 1;  // mando 0x03
+    LCD_Pulse_Enable();
+    __delay_ms(5);  // espero 5ms
+    
+    // segundo intento - modo 8 bits
+    D4 = 0; D5 = 0; D6 = 1; D7 = 1;  // otra vez 0x03
+    LCD_Pulse_Enable();
+    __delay_us(150);
+    
+    // tercer intento - modo 8 bits
+    D4 = 0; D5 = 0; D6 = 1; D7 = 1;  // y otra vez 0x03
+    LCD_Pulse_Enable();
+    __delay_us(150);
+    
+    // ahora si cambio a modo 4 bits
+    D4 = 0; D5 = 1; D6 = 0; D7 = 0;  // mando 0x02
+    LCD_Pulse_Enable();
+    __delay_us(150);
+    
+    // ya puedo usar comandos normales en modo 4 bits
+    LCD_Command(0x28);  // configuro: 4 bits, 2 lineas, letras de 5x7
+    __delay_us(100);
+    
+    LCD_Command(0x08);  // apago el display por ahora
+    __delay_us(100);
+    
+    LCD_Command(0x01);  // limpio todo
+    __delay_ms(2);
+    
+    LCD_Command(0x06);  // modo de entrada: cursor se mueve a la derecha
+    __delay_us(100);
+    
+    LCD_Command(0x0C);  // prendo el display, sin cursor visible
+    __delay_us(100);
+}
+
+// Limpiar pantalla
+void LCD_Clear(void) {
+    LCD_Command(0x01);  // comando para limpiar todo
+    __delay_ms(2);      // este comando es lento
+}
+
+// Posicionar cursor en LCD 16x2
+void LCD_Set_Cursor(uint8_t row, uint8_t col) {
+    uint8_t addr;  // variable para guardar la direccion
+    
+    // calculo donde va el cursor segun la fila
+    if(row == 1)
+        addr = 0x80 + col;  // fila 1 empieza en 0x80
+    else
+        addr = 0xC0 + col;  // fila 2 empieza en 0xC0
+    
+    LCD_Command(addr);  // mando el comando con la posicion
+}
+
+// Escribir cadena de texto
+void LCD_Write_String(const char *str) {
+    // recorro el string hasta encontrar el caracter nulo
+    while(*str) {
+        LCD_Data(*str++);  // mando cada caracter
+    }
+}
+
+// Función principal
+void main(void) {
+    // Configurar oscilador interno a 8MHz
+    OSCCON = 0b11110110;  // configuro a 8MHz
+    while(!OSCCONbits.IOFS);  // espero a que se estabilice el oscilador
+    
+    // Configurar puertos como digitales
+    ADCON1 = 0x0F;  // apago el ADC, todos los pines digitales
+    CMCON = 0x07;   // apago los comparadores
+    
+    // Configurar PORTB como salida
+    TRISB = 0x00;  // todos los pines de PORTB como salida
+    PORTB = 0x00;  // inicio todo en 0
+    
+    // espero un poco mas por si acaso
+    __delay_ms(100);
+    
+    LATBbits.LATB2 = 1;  // prendo un LED en RB2 (creo que para debug)
+    
+    // inicializo el LCD
+    LCD_Init();
+    
+    // limpio por si tenia algo
+    LCD_Clear();
+    
+    // escribo en la primera fila
+    LCD_Set_Cursor(1, 2);  // fila 1, columna 2 (para centrar un poco)
+    LCD_Write_String("Hola Mundo!");
+    
+    // escribo en la segunda fila
+    LCD_Set_Cursor(2, 3);  // fila 2, columna 3
+    LCD_Write_String("GNB");  // mis iniciales jaja
+    
+    // loop infinito
+    while(1) {
+        // hago parpadear el LED para saber que esta funcionando
+        LATBbits.LATB2 = 0;  // apago
+        __delay_ms(500);     // medio segundo
+        LATBbits.LATB2 = 1;  // prendo
+        __delay_ms(500);     // medio segundo
+    }
+    
+    return;  // nunca llega aca pero bueno
+}
