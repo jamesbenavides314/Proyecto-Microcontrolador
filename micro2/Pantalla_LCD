@@ -32,40 +32,34 @@ void LCD_Pulse_Enable(void);
 
 // Generar pulso en Enable
 void LCD_Pulse_Enable(void) {
-    EN = 1;
-    __delay_us(5);  // Pulso más largo
-    EN = 0;
-    __delay_us(5);
+    EN = 1;              // pongo el pin enable en alto
+    __delay_us(5);       // espero un poquito
+    EN = 0;              // bajo el enable
+    __delay_us(5);       // espero de nuevo
 }
 
 // Función para enviar nibble (4 bits) - Versión mejorada
 void LCD_Send_Nibble(uint8_t nibble) {
-    D4 = (nibble >> 0) & 0x01;
-    D5 = (nibble >> 1) & 0x01;
-    D6 = (nibble >> 2) & 0x01;
-    D7 = (nibble >> 3) & 0x01;
+    // aqui separo los 4 bits y los mando a los pines D4-D7
+    D4 = (nibble >> 0) & 0x01;  // primer bit
+    D5 = (nibble >> 1) & 0x01;  // segundo bit
+    D6 = (nibble >> 2) & 0x01;  // tercer bit
+    D7 = (nibble >> 3) & 0x01;  // cuarto bit
     
-    LCD_Pulse_Enable();
-    __delay_us(50);  // Delay adicional
+    LCD_Pulse_Enable();   // mando el pulso para que el LCD lea
+    __delay_us(50);       // espero un ratito
 }
 
 // Enviar comando al LCD
 void LCD_Command(uint8_t cmd) {
-    RS = 0;  // Modo comando
-    LCD_Send_Nibble(cmd >> 4);   // Enviar los 4 bits altos
-    LCD_Send_Nibble(cmd & 0x0F); // Enviar los 4 bits bajos
+    RS = 0;  // pongo RS en 0 porque voy a mandar un comando
+    LCD_Send_Nibble(cmd >> 4);   // primero mando la parte alta del byte
+    LCD_Send_Nibble(cmd & 0x0F); // luego mando la parte baja
     
+    // algunos comandos necesitan mas tiempo
     if(cmd == 0x01 || cmd == 0x02) {
-        __delay_ms(2);  // Comandos Clear y Home necesitan más tiempo
+        __delay_ms(2);  // clear y home son lentos
     } else {
-        __delay_us(100);
+        __delay_us(100);  // para los demas comandos
     }
-}
-
-// Enviar dato al LCD
-void LCD_Data(uint8_t data) {
-    RS = 1;  // Modo dato
-    LCD_Send_Nibble(data >> 4);   // Enviar los 4 bits altos
-    LCD_Send_Nibble(data & 0x0F); // Enviar los 4 bits bajos
-    __delay_us(100);
 }
