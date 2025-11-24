@@ -1,1 +1,124 @@
+%%%%%%%%%%%%%%% RTC sin pantalla oled %%%%%%%%%%%%%%%%
+#include <WiFi.h>
+#include <WebServer.h>
+#include <Wire.h>
+#include <RTClib.h>
 
+const char* ssid = "A33";
+const char* password = "27092312";
+
+RTC_DS3231 rtc;
+
+WebServer server(80);
+
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      text-align: center;
+      background: linear-gradient(135deg, #0f0f1a, #1a1b2e);
+      color: #E5E5E5;
+      padding: 30px;
+    }
+    h2 { font-size: 2.2rem; margin-bottom: 20px; }
+    .clock-icon { font-size: 6rem; margin-bottom: 20px; }
+    .info-box {
+      margin: auto;
+      padding: 20px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      border-radius: 20px;
+      max-width: 350px;
+    }
+    .label { font-size: 1.1rem; opacity: 0.8; }
+    .value { font-size: 1.8rem; font-weight: bold; margin-top: 10px; }
+  </style>
+</head>
+
+<body>
+  <h2> Reloj con RTC DS300</h2>
+
+  <div class="clock-icon">🕒</div>
+
+  <div class="info-box">
+    <div class="label">Fecha</div>
+    <div class="value" id="fecha">--/--/----</div>
+
+    <div class="label" style="margin-top:20px;">Hora</div>
+    <div class="value" id="hora">--:--:--</div>
+  </div>
+
+<script>
+function updateTime() {
+  fetch('/time')
+    .then(r => r.json())
+    .then(data => {
+      document.getElementById('fecha').textContent = data.fecha;
+      document.getElementById('hora').textContent  = data.hora;
+    });
+}
+
+setInterval(updateTime, 1000);
+window.onload = updateTime;
+</script>
+
+</body>
+</html>
+)rawliteral";
+
+void handleTimeData() {
+
+  DateTime now = rtc.now();
+
+  char fecha[20];
+  sprintf(fecha, "%02d/%02d/%04d", now.day(), now.month(), now.year());
+
+  char hora[20];
+  sprintf(hora, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+
+  String json = "{";
+  json += "\"fecha\":\"" + String(fecha) + "\",";
+  json += "\"hora\":\"" + String(hora) + "\"";
+  json += "}";
+
+  server.send(200, "application/json", json);
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  Wire.begin(21, 22);   
+  if (!rtc.begin()) {
+    Serial.println("⚠️ ERROR: No se encontró la RTC.");
+  }
+
+  if (rtc.lostPower()) {
+    Serial.println("⚠️ La RTC perdió energía, ajustando fecha/hora...");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); 
+  }
+
+  
+  WiFi.begin(ssid, password);
+  Serial.print("Conectando a WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConectado. IP:");
+  Serial.println(WiFi.localIP());
+
+  server.on("/", []() {
+    server.send_P(200, "text/html", index_html);
+  });
+  server.on("/time", handleTimeData);
+
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+}
