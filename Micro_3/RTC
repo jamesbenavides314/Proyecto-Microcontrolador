@@ -1,78 +1,107 @@
-%%%%%%%%%%%%%%% RTC sin pantalla oled %%%%%%%%%%%%%%%%
-#include <WiFi.h>
-#include <WebServer.h>
-#include <Wire.h>
-#include <RTClib.h>
+%%%%%%%%%%%%%%% RTC con pantalla oled %%%%%%%%%%%%%%%%
+#include <WiFi.h>              // Librería para manejar conexión WiFi en el ESP32
+#include <WebServer.h>         // Librería para crear un servidor web
+#include <Wire.h>              // Librería para comunicación I2C (RTC y OLED usan esto)
+#include <RTClib.h>            // Librería para manejar el módulo RTC DS3231
+#include <Adafruit_GFX.h>      // Librería gráfica base de Adafruit
+#include <Adafruit_SH110X.h>   // Librería específica para pantallas OLED SH1106
 
+// Datos del WiFi
 const char* ssid = "A33";
 const char* password = "27092312";
 
+// Crear objeto para la RTC
 RTC_DS3231 rtc;
 
+// Crear servidor web en el puerto 80
 WebServer server(80);
 
+// --- Configuración de la pantalla OLED SH1106 ---
+#define SCREEN_WIDTH 128   // Ancho de la pantalla OLED
+#define SCREEN_HEIGHT 64   // Alto de la pantalla OLED
+
+// Creo el objeto 'display' que controla la pantalla OLED
+// Se usa dirección I2C 0x3C y sin pin de reset (-1)
+Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// Variables para controlar actualización del OLED
+unsigned long previousMillis = 0;
+const long interval = 1000;  // Actualizar cada 1 segundo
+
+// --- Página Web que se mostrará cuando entremos desde el navegador ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE HTML><html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, sans-serif;
+    body { 
+      font-family: 'Segoe UI', Tahoma, sans-serif; 
       text-align: center;
       background: linear-gradient(135deg, #0f0f1a, #1a1b2e);
       color: #E5E5E5;
-      padding: 30px;
+      padding: 30px; 
     }
-    h2 { font-size: 2.2rem; margin-bottom: 20px; }
-    .clock-icon { font-size: 6rem; margin-bottom: 20px; }
-    .info-box {
-      margin: auto;
-      padding: 20px;
-      background: rgba(255,255,255,0.1);
+    .info-box { 
+      margin:auto; padding:20px; 
+      background:rgba(255,255,255,0.1);
       backdrop-filter: blur(10px);
-      border-radius: 20px;
-      max-width: 350px;
+      border-radius:20px; 
+      max-width:350px; 
     }
-    .label { font-size: 1.1rem; opacity: 0.8; }
-    .value { font-size: 1.8rem; font-weight: bold; margin-top: 10px; }
+    .value { font-size:1.8rem; font-weight:bold; margin-top:10px; }
   </style>
 </head>
 
 <body>
-  <h2> Reloj con RTC DS300</h2>
-
-  <div class="clock-icon">🕒</div>
-
+  <h2> Reloj con RTC y OLED</h2>
   <div class="info-box">
     <div class="label">Fecha</div>
     <div class="value" id="fecha">--/--/----</div>
-
     <div class="label" style="margin-top:20px;">Hora</div>
     <div class="value" id="hora">--:--:--</div>
   </div>
 
 <script>
+// Esta función consulta la hora al ESP32 a través de la ruta /time
 function updateTime() {
   fetch('/time')
-    .then(r => r.json())
+    .then(r => r.json())        // Recibo el JSON de respuesta
     .then(data => {
+      // Actualizo el HTML de la página web con la hora recibida
       document.getElementById('fecha').textContent = data.fecha;
       document.getElementById('hora').textContent  = data.hora;
     });
 }
-
+// Llamo a la función cada 1 segundo
 setInterval(updateTime, 1000);
 window.onload = updateTime;
 </script>
+</body></html>)rawliteral";
 
-</body>
-</html>
-)rawliteral";
-
+// --- Enviar datos JSON al navegador ---
 void handleTimeData() {
-
+  // Pido la hora actual al módulo RTC
   DateTime now = rtc.now();
+
+  // Armo cadenas con fecha y hora
+  char fecha[20], hora[20];
+  sprintf(fecha, "%02d/%02d/%04d", now.day(), now.month(), now.year());
+  sprintf(hora, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+
+  // Creo el JSON que se enviará al navegador
+  String json = "{";
+  json += "\"fecha\":\"" + String(fecha) + "\",";
+  json += "\"hora\":\"" + String(hora) + "\"";
+  json += "}";
+
+  // Lo mando al navegador como JSON
+  server.send(200, "application/json", json);
+}
+
+// --- Función que muestra la hora en la pantalla OLED ---
+void displayTimeOLED() {
+  DateTime now = rtc.now();   // Obtengo hora actual
 
   char fecha[20];
   sprintf(fecha, "%02d/%02d/%04d", now.day(), now.month(), now.year());
@@ -80,28 +109,55 @@ void handleTimeData() {
   char hora[20];
   sprintf(hora, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
 
-  String json = "{";
-  json += "\"fecha\":\"" + String(fecha) + "\",";
-  json += "\"hora\":\"" + String(hora) + "\"";
-  json += "}";
+  display.clearDisplay();  // Borra lo que tenía la pantalla antes
 
-  server.send(200, "application/json", json);
+  // --- Mostrar Fecha ---
+  display.setTextSize(1);
+  display.setCursor(0, 5);
+  display.println("Fecha:");
+  display.setCursor(45, 5);
+  display.println(fecha);
+
+  // --- Mostrar Hora ---
+  display.setTextSize(1); 
+  display.setCursor(0, 30);
+  display.println("Hora:");
+  display.setCursor(45, 30);
+  display.println(hora);
+
+  display.display();   // Actualiza la pantalla con todo lo escrito
 }
 
 void setup() {
   Serial.begin(115200);
 
-  Wire.begin(21, 22);   
+  // Inicializo comunicación I2C
+  Wire.begin(21, 22);   // SDA = 21, SCL = 22
+
+  // --- Inicio la RTC ---
   if (!rtc.begin()) {
     Serial.println("⚠️ ERROR: No se encontró la RTC.");
   }
 
+  // Si la RTC perdió energía, le pongo la hora del compilador
   if (rtc.lostPower()) {
-    Serial.println("⚠️ La RTC perdió energía, ajustando fecha/hora...");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); 
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
 
-  
+  // --- Inicio la pantalla OLED ---
+  if (!display.begin(0x3C, true)) {
+    Serial.println("⚠️ ERROR: No se encontró la pantalla OLED.");
+  } else {
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+    display.setTextSize(1);
+    display.setCursor(15, 20);
+    display.println("RTC + OLED Listo");
+    display.display();
+    delay(2000);
+  }
+
+  // --- Conexión WiFi ---
   WiFi.begin(ssid, password);
   Serial.print("Conectando a WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
@@ -111,14 +167,19 @@ void setup() {
   Serial.println("\nConectado. IP:");
   Serial.println(WiFi.localIP());
 
-  server.on("/", []() {
-    server.send_P(200, "text/html", index_html);
-  });
+  // --- Configuración de rutas del servidor web ---
+  server.on("/", []() { server.send_P(200, "text/html", index_html); });
   server.on("/time", handleTimeData);
-
   server.begin();
 }
 
 void loop() {
-  server.handleClient();
+  server.handleClient();   // Atiende peticiones del navegador
+
+  // Actualizar OLED cada segundo usando millis()
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+    displayTimeOLED();
+  }
 }
