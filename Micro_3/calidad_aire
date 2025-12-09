@@ -1,9 +1,14 @@
-%%%%%%%%%%%%%%%%% calidad de aire sin oled %%%%%%%%%%%%%%%%%%%%
-  // Incluye la biblioteca para manejar WiFi en el ESP32
+%%%%%%%%%%%%%%%%% calidad de aire con oled %%%%%%%%%%%%%%%%%%%%
+// Incluye la biblioteca para manejar WiFi en el ESP32
 #include <WiFi.h>
 
 // Incluye la biblioteca para crear un servidor web
 #include <WebServer.h>
+
+// Incluye las bibliotecas para la pantalla OLED
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
 
 // -------- CONFIGURACIÓN DE LA RED WiFi --------
 
@@ -12,6 +17,20 @@ const char* ssid = "Kta";
 
 // Contraseña de la red WiFi
 const char* password = "kta10592";
+
+// -------- CONFIGURACIÓN DE LA PANTALLA OLED --------
+
+#define SCREEN_WIDTH 128  // Ancho de la pantalla OLED en píxeles
+#define SCREEN_HEIGHT 64  // Alto de la pantalla OLED en píxeles
+#define OLED_RESET -1     // Pin de reset (o -1 si comparte el reset del ESP32)
+#define SCREEN_ADDRESS 0x3C // Dirección I2C de la pantalla OLED (0x3C o 0x3D)
+
+// Crea el objeto display para controlar la pantalla OLED SH1106/SH1107
+Adafruit_SH1106G display = Adafruit_SH1106G(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Pines I2C para la pantalla OLED
+#define SDA_PIN 21
+#define SCL_PIN 22
 
 // -------- CONFIGURACIÓN DEL SENSOR MQ-135 --------
 
@@ -156,6 +175,49 @@ window.onload = updateData;
 </html>
 )rawliteral";
 
+// -------- FUNCIÓN PARA ACTUALIZAR LA PANTALLA OLED --------
+
+void updateOLED() {
+  // Limpia el buffer de la pantalla
+  display.clearDisplay();
+  
+  // Título
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 0);
+  display.println("CALIDAD DEL AIRE");
+  display.drawLine(0, 10, 128, 10, SH110X_WHITE);
+  
+  // Valor PPM (grande y centrado)
+  display.setTextSize(2);
+  display.setCursor(20, 15);
+  display.print(airQualityValue);
+  display.setTextSize(1);
+  display.print(" PPM");
+  
+  // Estado de calidad del aire
+  display.setTextSize(1);
+  display.setCursor(0, 35);
+  display.print("Estado: ");
+  display.println(airQualityStatus);
+  
+  // Valores máximos y mínimos
+  display.setCursor(0, 46);
+  display.print("Max:");
+  display.print(airQualityMax);
+  display.print(" Min:");
+  display.print(airQualityMin);
+  
+  // IP del servidor
+  display.setCursor(0, 56);
+  display.setTextSize(1);
+  display.print("IP:");
+  display.print(WiFi.localIP().toString().substring(0, 11));
+  
+  // Muestra todo en la pantalla
+  display.display();
+}
+
 // -------- FUNCIÓN PARA EVALUAR CALIDAD DEL AIRE --------
 
 void updateAirQuality() {
@@ -183,6 +245,9 @@ void updateAirQuality() {
   // Actualiza valores máximos y mínimos
   if (ppm > airQualityMax) airQualityMax = ppm;
   if (ppm < airQualityMin) airQualityMin = ppm;
+  
+  // Actualiza la pantalla OLED con los nuevos valores
+  updateOLED();
 }
 
 // -------- FUNCIÓN PARA MANEJAR LOS DATOS DEL SENSOR --------
@@ -212,7 +277,30 @@ void setup() {
   // Configura el pin del sensor como entrada
   pinMode(MQ135_PIN, INPUT);
 
+  // Inicializa la comunicación I2C con los pines personalizados
+  Wire.begin(SDA_PIN, SCL_PIN);
+  
+  // Inicializa la pantalla OLED SH1106/SH1107
+  display.begin(SCREEN_ADDRESS, true);
+  display.clearDisplay();
+  
+  // Limpia la pantalla y muestra mensaje de inicio
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 0);
+  display.println("Iniciando...");
+  display.println("");
+  display.println("Monitor MQ-135");
+  display.display();
+  delay(2000);
+
   // Conecta el ESP32 a la red WiFi
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Conectando WiFi...");
+  display.display();
+  
   WiFi.begin(ssid, password);
 
   // Espera hasta que se establezca la conexión WiFi
@@ -224,6 +312,16 @@ void setup() {
   // Muestra por consola la IP asignada al ESP32
   Serial.println("Conectado. Dirección IP:");
   Serial.println(WiFi.localIP());
+  
+  // Muestra IP en la pantalla OLED
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("WiFi conectado!");
+  display.println("");
+  display.print("IP: ");
+  display.println(WiFi.localIP());
+  display.display();
+  delay(3000);
 
   // Define qué hacer cuando un navegador accede a la raíz "/"
   server.on("/", HTTP_GET, []() {
@@ -239,12 +337,24 @@ void setup() {
   Serial.println("Servidor web iniciado");
   Serial.println("Calibrando sensor MQ-135...");
   
+  // Muestra mensaje de calibración en OLED
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.println("Calibrando");
+  display.println("sensor...");
+  display.println("");
+  display.println("Espere 30 seg");
+  display.display();
+  
   // Periodo de precalentamiento del sensor (recomendado: 20-48 horas para mejor precisión)
   // Para pruebas rápidas, 30 segundos es suficiente
   delay(30000);
   
   Serial.println("Sensor listo!");
   Serial.println("Nota: El sensor requiere calibración para mediciones precisas en PPM");
+  
+  // Primera lectura y actualización de la pantalla
+  updateAirQuality();
 }
 
 // -------- FUNCIÓN PRINCIPAL QUE SE EJECUTA EN BUCLE --------
@@ -252,4 +362,11 @@ void setup() {
 void loop() {
   // Atiende las peticiones de los clientes que se conecten al servidor web
   server.handleClient();
+  
+  // Actualiza los datos del sensor cada 2 segundos
+  static unsigned long lastUpdate = 0;
+  if (millis() - lastUpdate >= 2000) {
+    updateAirQuality();
+    lastUpdate = millis();
+  }
 }
