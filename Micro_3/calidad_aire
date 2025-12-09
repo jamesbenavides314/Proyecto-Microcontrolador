@@ -1,0 +1,255 @@
+%%%%%%%%%%%%%%%%% calidad de aire sin oled %%%%%%%%%%%%%%%%%%%%
+  // Incluye la biblioteca para manejar WiFi en el ESP32
+#include <WiFi.h>
+
+// Incluye la biblioteca para crear un servidor web
+#include <WebServer.h>
+
+// -------- CONFIGURACIÓN DE LA RED WiFi --------
+
+// Nombre de la red WiFi (SSID)
+const char* ssid = "Kta";
+
+// Contraseña de la red WiFi
+const char* password = "kta10592";
+
+// -------- CONFIGURACIÓN DEL SENSOR MQ-135 --------
+
+// Define el pin analógico al que está conectado el sensor MQ-135
+#define MQ135_PIN 35
+
+// -------- UMBRALES PARA CALIDAD DEL AIRE (en PPM) --------
+
+#define AQ_EXCELLENT 50   // Excelente: menor a 50 PPM
+#define AQ_GOOD 100       // Buena: 50-100 PPM
+#define AQ_MODERATE 200   // Moderada: 100-200 PPM
+#define AQ_POOR 300       // Mala: 200-300 PPM
+                          // Muy Mala: más de 300 PPM
+
+// -------- CREACIÓN DEL SERVIDOR WEB EN PUERTO 80 --------
+
+// Crea un servidor web que atenderá en el puerto HTTP 80
+WebServer server(80);
+
+// -------- VARIABLES PARA GUARDAR MÁXIMOS Y MÍNIMOS --------
+
+// Inicializa variables para valor de calidad del aire máximo y mínimo (en PPM)
+int airQualityMax = 0, airQualityMin = 500;
+
+// Variable para almacenar el valor actual del sensor en PPM
+int airQualityValue = 0;
+
+// Variable para almacenar el estado de la calidad del aire
+String airQualityStatus = "Buena";
+
+// -------- CONTENIDO HTML QUE SE MOSTRARÁ EN LA PÁGINA WEB --------
+
+// Este bloque contiene el HTML que construye la interfaz web con gráfico tipo termómetro
+// Muestra la calidad del aire en PPM con un gradiente de color (verde=bueno, rojo=malo)
+// Incluye estilos visuales, escalas, colores y animaciones de barra
+// Usa JavaScript para solicitar datos nuevos del ESP32 cada 2 segundos
+const char index_html[] PROGMEM = R"rawliteral(
+<!DOCTYPE HTML><html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html { font-family: Arial; text-align: center; background-color: #f2f2f2; }
+    h2 { font-size: 2.2rem; margin-bottom: 30px; }
+    .container { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+    .thermo-block { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+    .bar-wrapper { display: flex; flex-direction: row; align-items: flex-end; gap: 8px; }
+    .bar-container {
+      position: relative; width: 60px; height: 250px;
+      background: linear-gradient(to top, #00ff00, #7fff00, #ffff00, #ff8c00, #ff0000);
+      border-radius: 30px; overflow: hidden; border: 2px solid #999;
+    }
+    .bar-mask {
+      position: absolute; top: 0; width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      transition: height 0.5s; z-index: 1;
+    }
+    .scale {
+      display: flex; flex-direction: column; justify-content: space-between;
+      height: 250px; font-size: 0.9rem;
+    }
+    .label { margin-top: 10px; font-size: 1.2rem; font-weight: bold; }
+    .value { font-size: 1.4rem; margin-top: 5px; }
+    .minmax { font-size: 1rem; margin-top: 4px; color: #333; }
+    .quality-status { 
+      font-size: 1.2rem; 
+      margin-top: 8px; 
+      padding: 8px 16px; 
+      border-radius: 8px; 
+      font-weight: bold;
+    }
+    .info-box {
+      background: white;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 15px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      max-width: 300px;
+    }
+    .info-title { font-weight: bold; margin-bottom: 8px; color: #333; }
+    .info-item { font-size: 0.9rem; color: #666; margin: 4px 0; text-align: left; }
+  </style>
+</head>
+<body>
+  <h2>ESP32 Monitor de Calidad del Aire (MQ-135)</h2>
+
+  <div class="container">
+    <!-- Monitor de Calidad del Aire -->
+    <div class="thermo-block">
+      <div class="bar-wrapper">
+        <div class="bar-container"><div class="bar-mask" id="air-quality-mask" style="height: 100%;"></div></div>
+        <div class="scale"><div>500</div><div>400</div><div>300</div><div>200</div><div>100</div><div>0</div></div>
+      </div>
+      <div class="label">🌫️ Calidad del Aire</div>
+      <div class="value"><span id="ppm-value">--</span> PPM</div>
+      <div class="quality-status" id="quality-status">--</div>
+      <div class="minmax">Máx: <span id="air-quality-max">--</span> PPM | Mín: <span id="air-quality-min">--</span> PPM</div>
+      
+      <div class="info-box">
+        <div class="info-title">📊 Niveles de Referencia:</div>
+        <div class="info-item">🟢 Excelente: &lt; 50 PPM</div>
+        <div class="info-item">🟡 Buena: 50-100 PPM</div>
+        <div class="info-item">🟠 Moderada: 100-200 PPM</div>
+        <div class="info-item">🔴 Mala: 200-300 PPM</div>
+        <div class="info-item">🟣 Muy Mala: &gt; 300 PPM</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+function getQualityStatus(ppm) {
+  if (ppm < 50) return { text: 'Excelente', color: '#00ff00', textColor: '#000' };
+  if (ppm < 100) return { text: 'Buena', color: '#7fff00', textColor: '#000' };
+  if (ppm < 200) return { text: 'Moderada', color: '#ffff00', textColor: '#000' };
+  if (ppm < 300) return { text: 'Mala', color: '#ff8c00', textColor: '#fff' };
+  return { text: 'Muy Mala', color: '#ff0000', textColor: '#fff' };
+}
+
+function updateData() {
+  fetch('/sensors')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('ppm-value').textContent = data.ppm;
+      document.getElementById('air-quality-max').textContent = data.airQualityMax;
+      document.getElementById('air-quality-min').textContent = data.airQualityMin;
+
+      const status = getQualityStatus(data.ppm);
+      const statusElement = document.getElementById('quality-status');
+      statusElement.textContent = status.text;
+      statusElement.style.backgroundColor = status.color;
+      statusElement.style.color = status.textColor;
+
+      // Calcula la altura de la máscara basándose en el rango 0-500 PPM
+      const percentage = Math.min((data.ppm / 500) * 100, 100);
+      document.getElementById('air-quality-mask').style.height = (100 - percentage) + '%';
+    });
+}
+setInterval(updateData, 2000);
+window.onload = updateData;
+</script>
+</body>
+</html>
+)rawliteral";
+
+// -------- FUNCIÓN PARA EVALUAR CALIDAD DEL AIRE --------
+
+void updateAirQuality() {
+  // Lee el valor analógico del sensor MQ-135 (rango 0-4095 en ESP32)
+  int rawValue = analogRead(MQ135_PIN);
+  
+  // Mapear valor analógico a PPM (0-4095 -> 0-500 PPM aprox)
+  // Nota: Estos valores son aproximados, el MQ135 requiere calibración precisa
+  int ppm = map(rawValue, 0, 4095, 0, 500);
+  airQualityValue = ppm;
+  
+  // Determina el estado de calidad del aire según los umbrales
+  if (ppm < AQ_EXCELLENT) {
+    airQualityStatus = "Excelente";
+  } else if (ppm < AQ_GOOD) {
+    airQualityStatus = "Buena";
+  } else if (ppm < AQ_MODERATE) {
+    airQualityStatus = "Moderada";
+  } else if (ppm < AQ_POOR) {
+    airQualityStatus = "Mala";
+  } else {
+    airQualityStatus = "Muy Mala";
+  }
+  
+  // Actualiza valores máximos y mínimos
+  if (ppm > airQualityMax) airQualityMax = ppm;
+  if (ppm < airQualityMin) airQualityMin = ppm;
+}
+
+// -------- FUNCIÓN PARA MANEJAR LOS DATOS DEL SENSOR --------
+
+void handleSensorData() {
+  // Actualiza los valores del sensor
+  updateAirQuality();
+
+  // Construye la respuesta en formato JSON para enviar al navegador
+  String json = "{";
+  json += "\"ppm\":" + String(airQualityValue) + ",";
+  json += "\"status\":\"" + airQualityStatus + "\",";
+  json += "\"airQualityMax\":" + String(airQualityMax) + ",";
+  json += "\"airQualityMin\":" + String(airQualityMin);
+  json += "}";
+
+  // Envía el JSON al navegador como respuesta a la solicitud
+  server.send(200, "application/json", json);
+}
+
+// -------- FUNCIÓN DE CONFIGURACIÓN (SE EJECUTA UNA VEZ AL INICIO) --------
+
+void setup() {
+  // Inicia la comunicación por el puerto serial a 115200 baudios
+  Serial.begin(115200);
+
+  // Configura el pin del sensor como entrada
+  pinMode(MQ135_PIN, INPUT);
+
+  // Conecta el ESP32 a la red WiFi
+  WiFi.begin(ssid, password);
+
+  // Espera hasta que se establezca la conexión WiFi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000); // Espera 1 segundo
+    Serial.println("Conectando a WiFi...");
+  }
+
+  // Muestra por consola la IP asignada al ESP32
+  Serial.println("Conectado. Dirección IP:");
+  Serial.println(WiFi.localIP());
+
+  // Define qué hacer cuando un navegador accede a la raíz "/"
+  server.on("/", HTTP_GET, []() {
+    server.send_P(200, "text/html", index_html); // Envía el HTML
+  });
+
+  // Define qué hacer cuando el navegador pide datos del sensor en "/sensors"
+  server.on("/sensors", HTTP_GET, handleSensorData);
+
+  // Inicia el servidor web
+  server.begin();
+
+  Serial.println("Servidor web iniciado");
+  Serial.println("Calibrando sensor MQ-135...");
+  
+  // Periodo de precalentamiento del sensor (recomendado: 20-48 horas para mejor precisión)
+  // Para pruebas rápidas, 30 segundos es suficiente
+  delay(30000);
+  
+  Serial.println("Sensor listo!");
+  Serial.println("Nota: El sensor requiere calibración para mediciones precisas en PPM");
+}
+
+// -------- FUNCIÓN PRINCIPAL QUE SE EJECUTA EN BUCLE --------
+
+void loop() {
+  // Atiende las peticiones de los clientes que se conecten al servidor web
+  server.handleClient();
+}
