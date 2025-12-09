@@ -1,0 +1,170 @@
+%%%%%%%%%%%%%%%% Sensor temperatura_humedad con pantalla oled %%%%%%%%%%%%%%%%%%%%%%
+#include <WiFi.h>                       // Librería para conectar el ESP32 al WiFi
+#include <WebServer.h>                  // Sirve para crear un servidor web en el ESP32
+#include <DHT.h>                        // Librería para leer el sensor DHT22
+#include <Adafruit_GFX.h>               // Librería gráfica base para pantallas
+#include <Adafruit_SH110X.h>            // Librería específica para la pantalla OLED SH1106
+
+const char* ssid = "Kta";               // Nombre de la red WiFi a la que me voy a conectar
+const char* password = "kta10592";      // Contraseña del WiFi para poder entrar
+
+#define DHTPIN 27                        // Pin donde conecté la salida del sensor DHT22
+#define DHTTYPE DHT22                    // Especifico que estoy usando el modelo DHT22
+DHT dht(DHTPIN, DHTTYPE);                // Creo el objeto del sensor para poder leerlo
+
+#define SCREEN_WIDTH 128                 // Ancho de la pantalla OLED (en pixeles)
+#define SCREEN_HEIGHT 64                 // Alto de la pantalla OLED
+Adafruit_SH1106G display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);   // Creo el objeto de la pantalla
+
+WebServer server(80);                    // Creo el servidor web en el puerto 80 (el normal en HTTP)
+
+float tempMax = -1000, tempMin = 1000;   // Variables para guardar máximas y mínimas de temperatura
+float humMax  = -1000, humMin  = 1000;   // Lo mismo pero para humedad
+float temp = 0, hum = 0;                 // Aquí guardo los valores actuales que lee el DHT22
+
+const char index_html[] PROGMEM = R"rawliteral(   // Página web que se mostrará desde el ESP32
+<!DOCTYPE HTML><html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html { font-family: Arial; text-align: center; background-color: #f2f2f2; }
+    h2 { font-size: 2.2rem; margin-bottom: 30px; }
+    .container { display: flex; justify-content: center; gap: 40px; flex-wrap: wrap; }
+    .thermo-block { display: flex; flex-direction: column; align-items: center; margin-bottom: 30px; }
+    .bar-wrapper { display: flex; flex-direction: row; align-items: flex-end; gap: 8px; }
+    .bar-container {
+      position: relative; width: 60px; height: 250px;
+      background: linear-gradient(to top, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000);
+      border-radius: 30px; overflow: hidden; border: 2px solid #999;
+    }
+    .bar-mask {
+      position: absolute; top: 0; width: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      transition: height 0.5s; z-index: 1;
+    }
+    .scale {
+      display: flex; flex-direction: column; justify-content: space-between;
+      height: 250px; font-size: 0.9rem;
+    }
+    .label { margin-top: 10px; font-size: 1.2rem; font-weight: bold; }
+    .value { font-size: 1.4rem; margin-top: 5px; }
+    .minmax { font-size: 1rem; margin-top: 4px; color: #333; }
+  </style>
+</head>
+<body>
+  <h2>ESP32 Monitor de Temperatura y Humedad</h2>
+
+  <div class="container">
+    <div class="thermo-block">
+      <div class="bar-wrapper">
+        <div class="bar-container"><div class="bar-mask" id="temperature-mask" style="height: 100%;"></div></div>
+        <div class="scale"><div>100</div><div>80</div><div>60</div><div>40</div><div>20</div><div>0</div></div>
+      </div>
+      <div class="label">🌡 Temperatura</div>
+      <div class="value"><span id="temperature">--</span> °C</div>
+      <div class="minmax">Máx: <span id="temperature-max">--</span> °C | Mín: <span id="temperature-min">--</span> °C</div>
+    </div>
+
+    <div class="thermo-block">
+      <div class="bar-wrapper">
+        <div class="bar-container"><div class="bar-mask" id="humidity-mask" style="height: 100%;"></div></div>
+        <div class="scale"><div>100</div><div>80</div><div>60</div><div>40</div><div>20</div><div>0</div></div>
+      </div>
+      <div class="label">💧 Humedad</div>
+      <div class="value"><span id="humidity">--</span> %</div>
+      <div class="minmax">Máx: <span id="humidity-max">--</span> % | Mín: <span id="humidity-min">--</span> %</div>
+    </div>
+  </div>
+
+<script>
+function updateData() {
+  fetch('/sensors')
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById('temperature').textContent = data.temp.toFixed(1);
+      document.getElementById('temperature-max').textContent = data.tempMax.toFixed(1);
+      document.getElementById('temperature-min').textContent = data.tempMin.toFixed(1);
+      document.getElementById('humidity').textContent = data.hum.toFixed(1);
+      document.getElementById('humidity-max').textContent = data.humMax.toFixed(1);
+      document.getElementById('humidity-min').textContent = data.humMin.toFixed(1);
+
+      document.getElementById('temperature-mask').style.height = (100 - Math.min(data.temp, 100)) + '%';
+      document.getElementById('humidity-mask').style.height = (100 - Math.min(data.hum, 100)) + '%';
+    });
+}
+setInterval(updateData, 2000);
+window.onload = updateData;
+</script>
+</body>
+</html>
+)rawliteral";
+
+void handleSensorData() {                // Función que se ejecuta cuando la web pide los datos
+  temp = dht.readTemperature();          // Leo la temperatura del DHT22
+  hum = dht.readHumidity();              // Leo la humedad del DHT22
+
+  if (!isnan(temp) && !isnan(hum)) {     // Verifico que no haya error en la lectura
+    if (temp > tempMax) tempMax = temp;  // Actualizo el máximo cuando corresponde
+    if (temp < tempMin) tempMin = temp;  // Actualizo el mínimo cuando corresponde
+    if (hum > humMax) humMax = hum;      // Igual para humedad
+    if (hum < humMin) humMin = hum;
+  }
+
+  display.clearDisplay();                // Borro la pantalla para escribir de nuevo
+  display.setTextSize(1);                // Texto pequeño para el título
+  display.setCursor(10, 5);
+  display.println("Sensor DHT22");       // Muestro el nombre del sensor
+
+  display.setTextSize(2);                // Texto grande para los valores
+  display.setCursor(0, 25);
+  display.print("Temp: "); display.print(temp, 1); display.println(" C");
+
+  display.setCursor(0, 45);
+  display.print("Hum:  "); display.print(hum, 1); display.println(" %");
+  display.display();                     // Envío todo a la pantalla OLED
+
+  String json = "{";                     // Creo un JSON con los datos del sensor
+  json += "\"temp\":" + String(temp, 1) + ",";
+  json += "\"tempMax\":" + String(tempMax, 1) + ",";
+  json += "\"tempMin\":" + String(tempMin, 1) + ",";
+  json += "\"hum\":" + String(hum, 1) + ",";
+  json += "\"humMax\":" + String(humMax, 1) + ",";
+  json += "\"humMin\":" + String(humMin, 1);
+  json += "}";
+
+  server.send(200, "application/json", json);  // Envío el JSON a la página web
+}
+
+void setup() {
+  Serial.begin(115200);                 // Inicio el puerto serial para ver mensajes en la PC
+  dht.begin();                          // Inicio el sensor DHT22
+
+  if (!display.begin(0x3C, true)) {     // Inicio la pantalla OLED en la dirección I2C correcta
+    while (1);                          // Si no arranca, me quedo aquí trabado
+  }
+
+  display.clearDisplay();               // Pantalla limpia
+  display.setTextSize(1);
+  display.setTextColor(SH110X_WHITE);
+  display.setCursor(0, 0);
+  display.println("Iniciando...");      // Mensaje de inicio
+  display.display();
+  delay(2000);                          // Espero un poco para que se vea
+
+  WiFi.begin(ssid, password);           // Intento conectarme al WiFi
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(1000);                        // Espero cada segundo
+  }
+
+  server.on("/", HTTP_GET, []() {       // Cuando la web pide "/", envío la página HTML
+    server.send_P(200, "text/html", index_html);
+  });
+  
+  server.on("/sensors", HTTP_GET, handleSensorData);   // Ruta que entrega los datos del sensor
+  server.begin();                       // Inicio el servidor web
+}
+
+void loop() {
+  server.handleClient();                // Atiendo peticiones de la página web constantemente
+}
