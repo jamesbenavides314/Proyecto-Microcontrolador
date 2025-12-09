@@ -1,54 +1,75 @@
-// =======================================
-//            LIBRERÍAS
-// =======================================
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DHT.h>
 #include <RTClib.h>
 #include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SH110X.h>
 
-// =======================================
-//            CONFIG WiFi
-// =======================================
-const char* ssid = "A33";
-const char* password = "27092312";
-
-// =======================================
-//            CONFIG DHT22
-// =======================================
+// ---------------------------
+// CONFIGURACIÓN DHT22
+// ---------------------------
 #define DHTPIN 27
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-// =======================================
-//            CONFIG RTC DS1307
-// =======================================
+// ---------------------------
+// CONFIG RTC DS1307
+// ---------------------------
 RTC_DS1307 rtc;
 
-// =======================================
-//         CONFIG SENSOR LUZ HW-486
-// =======================================
-#define LIGHT_SENSOR_PIN 34  // Pin analógico (ADC) para el sensor de luz
+// ---------------------------
+// SENSOR DE LUZ (HW-486)
+// ---------------------------
+#define LIGHT_SENSOR_PIN 34
 int lightValue = 0;
 bool isDayMode = true;
-#define LIGHT_THRESHOLD 2000 // Umbral para detectar día/noche (ajustar según necesidad)
-// NOTA: El HW-486 da valores BAJOS con luz y ALTOS sin luz (lógica invertida)
+#define LIGHT_THRESHOLD 2000
 
-// =======================================
-//            SERVIDOR WEB
-// =======================================
+// ---------------------------
+// SENSOR MQ135 (CALIDAD DE AIRE)
+// ---------------------------
+#define MQ135_PIN 35  // Pin analógico para MQ135
+int airQualityValue = 0;
+String airQualityStatus = "Buena";
+
+// ---------------------------
+// Umbrales para calidad del aire
+// ---------------------------
+#define AQ_EXCELLENT 50
+#define AQ_GOOD 100
+#define AQ_MODERATE 200
+#define AQ_POOR 300
+// Más de 300 = Muy Mala
+
+// ---------------------------
+// CONFIG WI-FI
+// ---------------------------
+const char* ssid = "A33";
+const char* password = "27092312";
 WebServer server(80);
 
-// =======================================
-//        VARIABLES GLOBAL TEMP/HUM
-// =======================================
+// ---------------------------
+// OLED SH1106
+// ---------------------------
+#define OLED_RESET -1
+Adafruit_SH1106G display(128, 64, &Wire, OLED_RESET);
+
+// ---------------------------
+// VARIABLES GLOBALES TEMP/HUM
+// ---------------------------
 float temp = 0, hum = 0;
 float tempMax = -1000, tempMin = 1000;
 float humMax  = -1000, humMin  = 1000;
 
-// =======================================
-//       VARIABLES PARA RTC/RESGUARDO
-// =======================================
+// ---------------------------
+// VARIABLE DE PAUSA DEL SISTEMA
+// ---------------------------
+bool systemPaused = false;
+
+// ---------------------------
+// VARIABLES PARA RTC CON RESGUARDO
+// ---------------------------
 unsigned long lastRtcMillis = 0;
 unsigned long lastUnixTs = 0;
 
@@ -254,6 +275,62 @@ const char index_html[] PROGMEM = R"rawliteral(
     text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
   }
 
+  /* BOTÓN DE PAUSA/REANUDACIÓN */
+  #pauseButton {
+    font-size: 1.5rem;
+    padding: 15px 40px;
+    margin: 20px 0;
+    border: none;
+    border-radius: 50px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+  }
+
+  #pauseButton:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+  }
+
+  #pauseButton:active {
+    transform: translateY(0);
+  }
+
+  #pauseButton.paused {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  }
+
+  /* NOTIFICACIÓN DE PAUSA */
+  #pauseNotification {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 87, 87, 0.95);
+    color: white;
+    padding: 30px 50px;
+    border-radius: 20px;
+    font-size: 2rem;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    display: none;
+    backdrop-filter: blur(10px);
+    animation: pulse-notification 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-notification {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.05); }
+  }
+
+  #pauseNotification.show {
+    display: block;
+  }
+
   /* INDICADOR DE LUZ */
   #light-indicator {
     display: inline-flex;
@@ -320,7 +397,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     gap: 50px;
     margin: 40px auto;
     flex-wrap: wrap;
-    max-width: 1200px;
+    max-width: 1400px;
   }
 
   .sensor-card {
@@ -417,6 +494,73 @@ const char index_html[] PROGMEM = R"rawliteral(
     letter-spacing: 2px;
   }
 
+  /* CALIDAD DEL AIRE */
+  .air-quality-card {
+    background: rgba(255,255,255,0.25);
+    backdrop-filter: blur(10px);
+    padding: 30px;
+    border-radius: 25px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    transition: all 0.5s ease;
+    min-width: 320px;
+    max-width: 400px;
+  }
+
+  body.night-mode .air-quality-card {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .air-quality-card:hover {
+    transform: translateY(-10px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+  }
+
+  .air-icon {
+    font-size: 4rem;
+    margin: 20px 0;
+  }
+
+  .air-status {
+    font-size: 2rem;
+    font-weight: bold;
+    margin: 15px 0;
+    padding: 10px 20px;
+    border-radius: 15px;
+    display: inline-block;
+  }
+
+  .status-excellent {
+    background: linear-gradient(135deg, #00c853, #64dd17);
+    color: white;
+  }
+
+  .status-good {
+    background: linear-gradient(135deg, #76ff03, #b2ff59);
+    color: #1b5e20;
+  }
+
+  .status-moderate {
+    background: linear-gradient(135deg, #ffd600, #ffea00);
+    color: #f57f17;
+  }
+
+  .status-poor {
+    background: linear-gradient(135deg, #ff6f00, #ff9100);
+    color: white;
+  }
+
+  .status-verypoor {
+    background: linear-gradient(135deg, #d50000, #ff1744);
+    color: white;
+  }
+
+  .air-ppm {
+    font-size: 1.8rem;
+    margin-top: 10px;
+    opacity: 0.9;
+  }
+
   /* RESPONSIVE */
   @media (max-width: 768px) {
     h2 { font-size: 2rem; }
@@ -425,6 +569,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     .container { gap: 30px; }
     .sensor-card { min-width: 240px; padding: 20px; }
     .value { font-size: 2rem; }
+    .air-quality-card { min-width: 280px; }
   }
 </style>
 </head>
@@ -446,6 +591,12 @@ const char index_html[] PROGMEM = R"rawliteral(
 
 <div id="main-content">
   <h2>🌤️ Estación Climática 🌙</h2>
+
+  <button id="pauseButton" onclick="togglePause()">⏸️ Pausar Sistema</button>
+
+  <div id="pauseNotification">
+    ⏸️ SISTEMA PAUSADO ⏸️
+  </div>
 
   <div id="light-indicator">
     <span class="light-icon">💡</span>
@@ -487,6 +638,14 @@ const char index_html[] PROGMEM = R"rawliteral(
         <div id="humVal" class="value">-- %</div>
       </div>
     </div>
+
+    <!-- CALIDAD DEL AIRE -->
+    <div class="air-quality-card">
+      <div class="label">🌬️ Calidad del Aire</div>
+      <div class="air-icon" id="airIcon">💨</div>
+      <div id="airStatus" class="air-status status-good">Buena</div>
+      <div class="air-ppm" id="airPPM">-- PPM</div>
+    </div>
   </div>
 </div>
 
@@ -496,6 +655,8 @@ let syncIntervalMs = 30000;
 let lastSync = 0;
 let tickTimer = null;
 let currentMode = 'day';
+let isPaused = false;
+let updateInterval = null;
 
 // Generar estrellas aleatorias
 function generateStars() {
@@ -512,19 +673,105 @@ function generateStars() {
   }
 }
 
+// Función para pausar/reanudar el sistema
+function togglePause() {
+  isPaused = !isPaused;
+  
+  fetch("/pause", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({paused: isPaused})
+  })
+  .then(res => res.json())
+  .then(data => {
+    console.log("Estado de pausa actualizado:", data);
+    updatePauseUI();
+  })
+  .catch(e => console.error("Error al cambiar estado de pausa:", e));
+}
+
+// Actualizar interfaz según estado de pausa
+function updatePauseUI() {
+  const btn = document.getElementById("pauseButton");
+  const notification = document.getElementById("pauseNotification");
+  
+  if (isPaused) {
+    btn.innerText = "▶️ Reanudar Sistema";
+    btn.classList.add("paused");
+    notification.classList.add("show");
+    
+    // Detener actualizaciones
+    if (updateInterval) {
+      clearInterval(updateInterval);
+      updateInterval = null;
+    }
+    if (tickTimer) {
+      clearInterval(tickTimer);
+      tickTimer = null;
+    }
+  } else {
+    btn.innerText = "⏸️ Pausar Sistema";
+    btn.classList.remove("paused");
+    notification.classList.remove("show");
+    
+    // Reanudar actualizaciones
+    updateInterval = setInterval(updateSensors, 1500);
+    syncTimeOnce();
+  }
+}
+
+// Actualizar calidad del aire
+function updateAirQuality(value, status) {
+  const statusEl = document.getElementById("airStatus");
+  const iconEl = document.getElementById("airIcon");
+  const ppmEl = document.getElementById("airPPM");
+  
+  statusEl.innerText = status;
+  ppmEl.innerText = value + " PPM";
+  
+  // Remover todas las clases de estado
+  statusEl.className = "air-status";
+  
+  // Agregar clase según el estado
+  if (status === "Excelente") {
+    statusEl.classList.add("status-excellent");
+    iconEl.innerText = "✨";
+  } else if (status === "Buena") {
+    statusEl.classList.add("status-good");
+    iconEl.innerText = "😊";
+  } else if (status === "Moderada") {
+    statusEl.classList.add("status-moderate");
+    iconEl.innerText = "😐";
+  } else if (status === "Mala") {
+    statusEl.classList.add("status-poor");
+    iconEl.innerText = "😷";
+  } else if (status === "Muy Mala") {
+    statusEl.classList.add("status-verypoor");
+    iconEl.innerText = "☠️";
+  }
+}
+
 // Actualizar sensores
 function updateSensors() {
+  if (isPaused) return;
+  
   fetch("/sensors")
     .then(res => res.json())
     .then(data => {
       const t = Number(data.temp);
       const h = Number(data.hum);
       const l = Number(data.light);
+      const aq = Number(data.airQuality);
+      const aqStatus = data.airStatus || "Buena";
       const mode = data.mode || 'day';
       
       document.getElementById("tempVal").innerText = isFinite(t) ? t.toFixed(2) + " °C" : "-- °C";
       document.getElementById("humVal").innerText = isFinite(h) ? h.toFixed(2) + " %" : "-- %";
       document.getElementById("light-value").innerText = isFinite(l) ? l + " lux" : "-- lux";
+      
+      if (isFinite(aq)) {
+        updateAirQuality(aq, aqStatus);
+      }
 
       let tVal = isFinite(t) ? t : 0;
       let hVal = isFinite(h) ? h : 0;
@@ -544,12 +791,17 @@ function updateSensors() {
 }
 
 function syncTimeOnce() {
+  if (isPaused) return;
+  
   fetch("/time")
     .then(res => res.json())
     .then(t => {
-      clientTime = new Date(t.year, t.month - 1, t.day, t.hour, t.minute, t.second);
+      clientTime = new Date();
+      clientTime.setFullYear(t.year, t.month - 1, t.day);
+      clientTime.setHours(t.hour, t.minute, t.second, 0);
+      
       lastSync = Date.now();
-      if (!tickTimer) {
+      if (!tickTimer && !isPaused) {
         tickTimer = setInterval(tickClientClock, 1000);
       }
       displayClientTime();
@@ -558,7 +810,7 @@ function syncTimeOnce() {
 }
 
 function tickClientClock() {
-  if (!clientTime) return;
+  if (!clientTime || isPaused) return;
   clientTime = new Date(clientTime.getTime() + 1000);
   displayClientTime();
   if (Date.now() - lastSync > syncIntervalMs) {
@@ -586,140 +838,295 @@ window.onload = function() {
   generateStars();
   updateSensors();
   syncTimeOnce();
-  setInterval(updateSensors, 1500);
+  updateInterval = setInterval(updateSensors, 1500);
 };
 </script>
 
 </body>
 </html>
 )rawliteral";
+// ==============================
 
-// =======================================
-//           MANEJO ENDPOINT /SENSORS
-// =======================================
+// =========================================================
+//  FUNCIÓN PARA EVALUAR CALIDAD DEL AIRE
+// =========================================================
+void updateAirQuality() {
+    airQualityValue = analogRead(MQ135_PIN);
+    
+    // Mapear valor analógico a PPM (0-4095 -> 0-500 PPM aprox)
+    // Nota: Estos valores son aproximados, el MQ135 requiere calibración
+    int ppm = map(airQualityValue, 0, 4095, 0, 500);
+    airQualityValue = ppm;
+    
+    if (ppm < AQ_EXCELLENT) {
+        airQualityStatus = "Excelente";
+    } else if (ppm < AQ_GOOD) {
+        airQualityStatus = "Buena";
+    } else if (ppm < AQ_MODERATE) {
+        airQualityStatus = "Moderada";
+    } else if (ppm < AQ_POOR) {
+        airQualityStatus = "Mala";
+    } else {
+        airQualityStatus = "Muy Mala";
+    }
+}
+
+// =========================================================
+//  PAUSA/REANUDA EL SISTEMA
+// =========================================================
+void handlePause() {
+    if (server.method() == HTTP_POST) {
+        String body = server.arg("plain");
+        
+        // Parsear JSON simple manualmente
+        int pausedIndex = body.indexOf("\"paused\":");
+        if (pausedIndex != -1) {
+            String value = body.substring(pausedIndex + 9);
+            value.trim();
+            systemPaused = (value.indexOf("true") != -1);
+            
+            Serial.print("Sistema ");
+            Serial.println(systemPaused ? "PAUSADO" : "REANUDADO");
+            
+            char json[100];
+            snprintf(json, sizeof(json),
+                     "{\"success\":true,\"paused\":%s}",
+                     systemPaused ? "true" : "false");
+            
+            server.send(200, "application/json", json);
+        } else {
+            server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
+        }
+    } else {
+        server.send(405, "application/json", "{\"error\":\"Method not allowed\"}");
+    }
+}
+
+// =========================================================
+//  RETORNA TEMP, HUM, LUZ Y AIRE
+// =========================================================
 void handleSensors() {
-  temp = dht.readTemperature();
-  hum = dht.readHumidity();
-  
-  // Leer sensor de luz
-  lightValue = analogRead(LIGHT_SENSOR_PIN);
-  
-  // Determinar modo día/noche (INVERTIDO: valores BAJOS = luz presente = día)
-  isDayMode = (lightValue < LIGHT_THRESHOLD);
+    temp = dht.readTemperature();
+    hum = dht.readHumidity();
+    lightValue = analogRead(LIGHT_SENSOR_PIN);
+    isDayMode = (lightValue < LIGHT_THRESHOLD);
+    
+    updateAirQuality();
 
-  if (!isnan(temp)) {
-    if (temp > tempMax) tempMax = temp;
-    if (temp < tempMin) tempMin = temp;
-  }
+    if (!isnan(temp)) {
+        if (temp > tempMax) tempMax = temp;
+        if (temp < tempMin) tempMin = temp;
+    }
+    if (!isnan(hum)) {
+        if (hum > humMax) humMax = hum;
+        if (hum < humMin) humMin = hum;
+    }
 
-  if (!isnan(hum)) {
-    if (hum > humMax) humMax = hum;
-    if (hum < humMin) humMin = hum;
-  }
+    char json[400];
+    snprintf(json, sizeof(json),
+             "{\"temp\":%.2f,\"hum\":%.2f,"
+             "\"tempMax\":%.2f,\"tempMin\":%.2f,"
+             "\"humMax\":%.2f,\"humMin\":%.2f,"
+             "\"light\":%d,\"mode\":\"%s\","
+             "\"airQuality\":%d,\"airStatus\":\"%s\"}",
+             temp, hum, tempMax, tempMin, humMax, humMin,
+             lightValue, isDayMode ? "day" : "night",
+             airQualityValue, airQualityStatus.c_str());
 
-  char json[300];
-  snprintf(json, sizeof(json),
-           "{\"temp\":%.2f,\"hum\":%.2f,"
-           "\"tempMax\":%.2f,\"tempMin\":%.2f,"
-           "\"humMax\":%.2f,\"humMin\":%.2f,"
-           "\"light\":%d,\"mode\":\"%s\"}",
-           temp, hum, tempMax, tempMin, humMax, humMin,
-           lightValue, isDayMode ? "day" : "night");
-
-  server.send(200, "application/json", json);
+    server.send(200, "application/json", json);
 }
 
-// =======================================
-//           MANEJO ENDPOINT /TIME
-// =======================================
+// =========================================================
+//  RETORNA HORA Y FECHA
+// =========================================================
 void handleTime() {
-  DateTime now;
-  now = rtc.now();
-
-  unsigned long nowUnix = (unsigned long) now.unixtime();
-  unsigned long m = millis();
-
-  if (lastUnixTs == 0) {
-    lastUnixTs = nowUnix;
-    lastRtcMillis = m;
-  }
-
-  if (nowUnix == lastUnixTs) {
-    if ((m - lastRtcMillis) > 1500) {
-      lastUnixTs += 1;
-      lastRtcMillis = m;
+    if (!rtc.isrunning()) {
+        server.send(500, "application/json", "{\"error\":\"RTC not running\"}");
+        return;
     }
-  } else {
-    lastUnixTs = nowUnix;
-    lastRtcMillis = m;
-  }
+    
+    DateTime now = rtc.now();
+    
+    char json[200];
+    snprintf(json, sizeof(json),
+             "{\"hour\":%d,\"minute\":%d,\"second\":%d,"
+             "\"day\":%d,\"month\":%d,\"year\":%d,"
+             "\"weekday\":%d}",
+             now.hour(), now.minute(), now.second(),
+             now.day(), now.month(), now.year(),
+             now.dayOfTheWeek());
 
-  DateTime effective = DateTime((time_t) lastUnixTs);
-
-  char json[200];
-  snprintf(json, sizeof(json),
-           "{\"hour\":%02d,\"minute\":%02d,\"second\":%02d,"
-           "\"day\":%02d,\"month\":%02d,\"year\":%04d,"
-           "\"weekday\":%d}",
-           effective.hour(), effective.minute(), effective.second(),
-           effective.day(), effective.month(), effective.year(),
-           effective.dayOfTheWeek());
-
-  server.send(200, "application/json", json);
+    server.send(200, "application/json", json);
 }
 
-// =======================================
-//                SETUP
-// =======================================
+// =========================================================
+//    OLED — ALTERNA ENTRE Reloj / Temperatura / Humedad / Aire
+// =========================================================
+unsigned long lastOLEDUpdate = 0;
+int oledState = 0;   // 0=hora, 1=temp, 2=hum, 3=aire
+
+void updateOLED() {
+    if (millis() - lastOLEDUpdate < 3000) return;
+    lastOLEDUpdate = millis();
+
+    display.clearDisplay();
+    display.setTextColor(SH110X_WHITE);
+
+    // Si el sistema está en pausa, mostrar mensaje
+    if (systemPaused) {
+        display.setTextSize(2);
+        display.setCursor(5, 10);
+        display.println("SISTEMA");
+        display.setCursor(10, 35);
+        display.println("PAUSADO");
+        display.display();
+        return;
+    }
+
+    DateTime now = rtc.now();
+
+    switch (oledState) {
+        case 0:  // RELOJ
+            display.setTextSize(2);
+            display.setCursor(0,0);
+            display.printf("%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+            display.setTextSize(1);
+            display.setCursor(0,40);
+            display.printf("%02d/%02d/%04d", now.day(), now.month(), now.year());
+            break;
+
+        case 1:  // TEMPERATURA
+            display.setTextSize(2);
+            display.setCursor(0,0);
+            display.println("TEMP");
+            display.setTextSize(3);
+            display.setCursor(0,25);
+            display.printf("%.1fC", temp);
+            break;
+
+        case 2:  // HUMEDAD
+            display.setTextSize(2);
+            display.setCursor(0,0);
+            display.println("HUM");
+            display.setTextSize(3);
+            display.setCursor(0,25);
+            display.printf("%.1f%%", hum);
+            break;
+
+        case 3:  // CALIDAD DEL AIRE
+            display.setTextSize(1);
+            display.setCursor(0,0);
+            display.println("CALIDAD AIRE");
+            display.setTextSize(2);
+            display.setCursor(0,20);
+            display.println(airQualityStatus);
+            display.setTextSize(2);
+            display.setCursor(0,45);
+            display.printf("%d PPM", airQualityValue);
+            break;
+    }
+
+    display.display();
+
+    oledState = (oledState + 1) % 4;  // Ahora son 4 estados
+}
+
+// =========================================================
+//                        SETUP
+// =========================================================
 void setup() {
-  Serial.begin(115200);
-  dht.begin();
+    Serial.begin(115200);
+    delay(500);
+    Serial.println("Iniciando...");
 
-  // Configurar pin del sensor de luz como entrada
-  pinMode(LIGHT_SENSOR_PIN, INPUT);
+    dht.begin();
+    pinMode(LIGHT_SENSOR_PIN, INPUT);
+    pinMode(MQ135_PIN, INPUT);  // Configurar pin del MQ135
 
-  Wire.begin(21, 22);
+    Wire.begin(21, 22);
 
-  if (!rtc.begin()) {
-    Serial.println("No se detecta RTC");
-  } else {
-    Serial.println("RTC detectado");
-  }
+    display.begin(0x3C, true);
+    display.clearDisplay();
+    display.setCursor(0,0);
+    display.setTextSize(1);
+    display.println("Estacion");
+    display.println("Climatica");
+    display.println("Iniciando...");
+    display.display();
+    delay(2000);
 
-  if (!rtc.isrunning()) {
-    Serial.println("RTC no estaba en marcha, configurando hora...");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  }
-
-  WiFi.begin(ssid, password);
-  Serial.print("Conectando a WiFi");
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(300);
-    Serial.print(".");
-    if (millis() - start > 10000) {
-      Serial.println("\nTimeout conexión WiFi (10s). Continua sin conexión.");
-      break;
+    if (!rtc.begin()) {
+        Serial.println("RTC no encontrado!");
+        Serial.println("Verifica las conexiones I2C (SDA=21, SCL=22)");
+    } else {
+        Serial.println("RTC inicializado correctamente");
     }
-  }
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nConectado!");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("No conectado a WiFi.");
-  }
 
-  server.on("/", []() { server.send(200, "text/html", index_html); });
-  server.on("/sensors", handleSensors);
-  server.on("/time", handleTime);
+    if (!rtc.isrunning()) {
+        Serial.println("RTC no está corriendo, ajustando fecha/hora...");
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        Serial.println("Fecha/hora ajustada");
+    } else {
+        Serial.println("RTC está corriendo");
+        DateTime now = rtc.now();
+        Serial.print("Hora actual del RTC: ");
+        Serial.print(now.year());
+        Serial.print("/");
+        Serial.print(now.month());
+        Serial.print("/");
+        Serial.print(now.day());
+        Serial.print(" ");
+        Serial.print(now.hour());
+        Serial.print(":");
+        Serial.print(now.minute());
+        Serial.print(":");
+        Serial.println(now.second());
+    }
 
-  server.begin();
-  Serial.println("Servidor iniciado.");
+    Serial.print("Conectando a WiFi: ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
+
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 12000) {
+        delay(300);
+        Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi conectado!");
+        Serial.print("IP: ");
+        Serial.println(WiFi.localIP());
+        
+        display.clearDisplay();
+        display.setCursor(0,0);
+        display.setTextSize(1);
+        display.println("WiFi OK!");
+        display.print("IP:");
+        display.println(WiFi.localIP());
+        display.display();
+        delay(3000);
+    } else {
+        Serial.println("\nWiFi NO conectado");
+    }
+
+    server.on("/", [](){ server.send(200, "text/html", index_html); });
+    server.on("/sensors", handleSensors);
+    server.on("/time", handleTime);
+    server.on("/pause", HTTP_POST, handlePause);
+
+    server.begin();
+    Serial.println("Servidor iniciado.");
+    Serial.println("Sensores configurados:");
+    Serial.println("- DHT22 en pin 27");
+    Serial.println("- Sensor de luz en pin 34");
+    Serial.println("- MQ135 en pin 35");
 }
 
-// =======================================
-//                 LOOP
-// =======================================
+// =========================================================
+//                        LOOP
+// =========================================================
 void loop() {
-  server.handleClient();
+    server.handleClient();
+    updateOLED();
 }
